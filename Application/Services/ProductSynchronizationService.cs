@@ -15,6 +15,7 @@ public abstract class ProductSynchronizationService
 {
     private readonly ActindoClient _client;
     private readonly ILogger _logger;
+    private const int MaxConcurrentVariantOperations = 4;
 
     private static readonly JsonSerializerOptions LogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -84,65 +85,30 @@ public abstract class ProductSynchronizationService
         var createdVariants = new List<VariantCreationResult>();
         var variantErrors = new List<string>();
 
-        foreach (var variant in product.Variants ?? Enumerable.Empty<ProductDto>())
+        var variants = product.Variants ?? new List<ProductDto>();
+        if (variants.Count > 0)
         {
-            _logger.LogInformation("Start variant sync for SKU {Sku}", variant.sku);
-            try
+            using var semaphore = new SemaphoreSlim(MaxConcurrentVariantOperations);
+            var tasks = variants
+                .Select((variant, index) => SyncVariantAsync(
+                    product,
+                    variant,
+                    index,
+                    masterProductId,
+                    productEndpoint,
+                    semaphore,
+                    cancellationToken))
+                .ToArray();
+
+            var results = await Task.WhenAll(tasks);
+
+            foreach (var result in results.OrderBy(r => r.Index))
             {
-                if (IsIndiVariant(variant))
-                {
-                    var indiResult = await HandleIndiVariantAsync(
-                        product,
-                        variant,
-                        cancellationToken);
-                    createdVariants.Add(indiResult);
-                    continue;
-                }
+                if (result.Result is not null)
+                    createdVariants.Add(result.Result);
 
-                var variantPayload = new { product = BuildVariantProduct(variant) };
-                LogEndpointPayload(productEndpoint, variantPayload);
-                var variantResponse = await _client.PostAsync(productEndpoint, variantPayload, cancellationToken);
-
-                var variantProductId = variantResponse
-                    .GetProperty("product")
-                    .GetProperty("id")
-                    .GetInt32();
-
-                _logger.LogInformation(
-                    "Variant synced for SKU {Sku} with ID {Id}",
-                    variant.sku,
-                    variantProductId);
-
-                var relationPayload = new
-                {
-                    variantProduct = new { id = variantProductId },
-                    parentProduct = new { id = masterProductId }
-                };
-                LogEndpointPayload(ActindoEndpoints.CREATE_RELATION, relationPayload);
-                await _client.PostAsync(ActindoEndpoints.CREATE_RELATION, relationPayload, cancellationToken);
-
-                foreach (var inventory in variant.Inventory ?? Enumerable.Empty<InventoryDto>())
-                {
-                    var variantInventoryPayload = BuildInventoryPayload(variant.sku, inventory);
-                    LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, variantInventoryPayload);
-                    await _client.PostAsync(
-                        ActindoEndpoints.CREATE_INVENTORY,
-                        variantInventoryPayload,
-                        cancellationToken);
-                    await Task.Delay(100, cancellationToken);
-                    _logger.LogInformation(
-                        "Inventory movement posted for SKU {Sku} warehouse {Warehouse} compartment {Compartment}",
-                        variant.sku,
-                        inventory.WarehouseId,
-                        inventory.CompartmentId);
-                }
-
-                createdVariants.Add(new VariantCreationResult(variant.sku, variantProductId));
-            }
-            catch (Exception ex)
-            {
-                variantErrors.Add($"{variant.sku}: {ex.Message}");
-                _logger.LogError(ex, "Variant sync failed for SKU {Sku}", variant.sku);
+                if (!string.IsNullOrEmpty(result.Error))
+                    variantErrors.Add(result.Error!);
             }
         }
 
@@ -156,10 +122,88 @@ public abstract class ProductSynchronizationService
         };
     }
 
-    private static object BuildVariantProduct(ProductDto variant)
+    private async Task<VariantSyncResult> SyncVariantAsync(
+        ProductDto masterProduct,
+        ProductDto variant,
+        int index,
+        int masterProductId,
+        string productEndpoint,
+        SemaphoreSlim semaphore,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(variant);
-        return variant;
+        await semaphore.WaitAsync(cancellationToken);
+        try
+        {
+            _logger.LogInformation("Start variant sync for SKU {Sku}", variant.sku);
+
+            if (IsIndiVariant(variant))
+            {
+                var indiResult = await HandleIndiVariantAsync(
+                    masterProduct,
+                    variant,
+                    cancellationToken);
+                return new VariantSyncResult(index, indiResult, null);
+            }
+
+            var variantPayload = new { product = variant };
+            LogEndpointPayload(productEndpoint, variantPayload);
+            var variantResponse = await _client.PostAsync(
+                productEndpoint,
+                variantPayload,
+                cancellationToken);
+
+            var variantProductId = variantResponse
+                .GetProperty("product")
+                .GetProperty("id")
+                .GetInt32();
+
+            _logger.LogInformation(
+                "Variant synced for SKU {Sku} with ID {Id}",
+                variant.sku,
+                variantProductId);
+
+            var relationPayload = new
+            {
+                variantProduct = new { id = variantProductId },
+                parentProduct = new { id = masterProductId }
+            };
+            LogEndpointPayload(ActindoEndpoints.CREATE_RELATION, relationPayload);
+            await _client.PostAsync(
+                ActindoEndpoints.CREATE_RELATION,
+                relationPayload,
+                cancellationToken);
+
+            foreach (var inventory in variant.Inventory ?? Enumerable.Empty<InventoryDto>())
+            {
+                var variantInventoryPayload = BuildInventoryPayload(variant.sku, inventory);
+                LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, variantInventoryPayload);
+                await _client.PostAsync(
+                    ActindoEndpoints.CREATE_INVENTORY,
+                    variantInventoryPayload,
+                    cancellationToken);
+                await Task.Delay(100, cancellationToken);
+
+                _logger.LogInformation(
+                    "Inventory posted for SKU {Sku} warehouse {Warehouse} compartment {Compartment}",
+                    variant.sku,
+                    inventory.WarehouseId,
+                    inventory.CompartmentId);
+            }
+
+            return new VariantSyncResult(
+                index,
+                new VariantCreationResult(variant.sku, variantProductId),
+                null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Variant sync failed for SKU {Sku}", variant.sku);
+            return new VariantSyncResult(index, null, $"{variant.sku}: {ex.Message}");
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     private static object BuildInventoryPayload(string sku, InventoryDto inventory)
@@ -292,4 +336,6 @@ public abstract class ProductSynchronizationService
 
         return new VariantCreationResult(masterSku, indiMasterId);
     }
+
+    private sealed record VariantSyncResult(int Index, VariantCreationResult? Result, string? Error);
 }
