@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using ActindoMiddleware.DTOs;
 using ActindoMiddleware.DTOs.Responses;
@@ -16,6 +18,7 @@ public abstract class ProductSynchronizationService
     private readonly ActindoClient _client;
     private readonly ILogger _logger;
     private const int MaxConcurrentVariantOperations = 4;
+    private const int InventoryWorkerCount = 3;
 
     private static readonly JsonSerializerOptions LogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -84,8 +87,23 @@ public abstract class ProductSynchronizationService
 
         var createdVariants = new List<VariantCreationResult>();
         var variantErrors = new List<string>();
+        var inventoryErrors = new ConcurrentBag<string>();
+        var inventoryChannel = Channel.CreateUnbounded<InventoryWorkItem>(new UnboundedChannelOptions
+        {
+            SingleReader = false,
+            SingleWriter = false
+        });
+
+        var inventoryWorkers = Enumerable.Range(0, InventoryWorkerCount)
+            .Select(_ => ProcessInventoryQueueAsync(
+                inventoryChannel.Reader,
+                inventoryErrors,
+                cancellationToken))
+            .ToArray();
 
         var variants = product.Variants ?? new List<ProductDto>();
+        VariantSyncResult[] results = Array.Empty<VariantSyncResult>();
+
         if (variants.Count > 0)
         {
             using var semaphore = new SemaphoreSlim(MaxConcurrentVariantOperations);
@@ -97,10 +115,19 @@ public abstract class ProductSynchronizationService
                     masterProductId,
                     productEndpoint,
                     semaphore,
+                    inventoryChannel.Writer,
                     cancellationToken))
                 .ToArray();
 
-            var results = await Task.WhenAll(tasks);
+            try
+            {
+                results = await Task.WhenAll(tasks);
+            }
+            finally
+            {
+                inventoryChannel.Writer.TryComplete();
+                await Task.WhenAll(inventoryWorkers);
+            }
 
             foreach (var result in results.OrderBy(r => r.Index))
             {
@@ -110,6 +137,16 @@ public abstract class ProductSynchronizationService
                 if (!string.IsNullOrEmpty(result.Error))
                     variantErrors.Add(result.Error!);
             }
+        }
+        else
+        {
+            inventoryChannel.Writer.TryComplete();
+            await Task.WhenAll(inventoryWorkers);
+        }
+
+        foreach (var error in inventoryErrors)
+        {
+            variantErrors.Add(error);
         }
 
         return new CreateProductResponse
@@ -129,6 +166,7 @@ public abstract class ProductSynchronizationService
         int masterProductId,
         string productEndpoint,
         SemaphoreSlim semaphore,
+        ChannelWriter<InventoryWorkItem> inventoryWriter,
         CancellationToken cancellationToken)
     {
         await semaphore.WaitAsync(cancellationToken);
@@ -175,19 +213,9 @@ public abstract class ProductSynchronizationService
 
             foreach (var inventory in variant.Inventory ?? Enumerable.Empty<InventoryDto>())
             {
-                var variantInventoryPayload = BuildInventoryPayload(variant.sku, inventory);
-                LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, variantInventoryPayload);
-                await _client.PostAsync(
-                    ActindoEndpoints.CREATE_INVENTORY,
-                    variantInventoryPayload,
+                await inventoryWriter.WriteAsync(
+                    new InventoryWorkItem(variant.sku, inventory),
                     cancellationToken);
-                await Task.Delay(100, cancellationToken);
-
-                _logger.LogInformation(
-                    "Inventory posted for SKU {Sku} warehouse {Warehouse} compartment {Compartment}",
-                    variant.sku,
-                    inventory.WarehouseId,
-                    inventory.CompartmentId);
             }
 
             return new VariantSyncResult(
@@ -337,5 +365,37 @@ public abstract class ProductSynchronizationService
         return new VariantCreationResult(masterSku, indiMasterId);
     }
 
+    private async Task ProcessInventoryQueueAsync(
+        ChannelReader<InventoryWorkItem> reader,
+        ConcurrentBag<string> errors,
+        CancellationToken cancellationToken)
+    {
+        await foreach (var workItem in reader.ReadAllAsync(cancellationToken))
+        {
+            try
+            {
+                var payload = BuildInventoryPayload(workItem.Sku, workItem.Inventory);
+                LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, payload);
+                await _client.PostAsync(
+                    ActindoEndpoints.CREATE_INVENTORY,
+                    payload,
+                    cancellationToken);
+                await Task.Delay(100, cancellationToken);
+
+                _logger.LogInformation(
+                    "Inventory posted for SKU {Sku} warehouse {Warehouse} compartment {Compartment}",
+                    workItem.Sku,
+                    workItem.Inventory.WarehouseId,
+                    workItem.Inventory.CompartmentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Inventory sync failed for SKU {Sku}", workItem.Sku);
+                errors.Add($"{workItem.Sku}: {ex.Message}");
+            }
+        }
+    }
+
     private sealed record VariantSyncResult(int Index, VariantCreationResult? Result, string? Error);
+    private sealed record InventoryWorkItem(string Sku, InventoryDto Inventory);
 }
