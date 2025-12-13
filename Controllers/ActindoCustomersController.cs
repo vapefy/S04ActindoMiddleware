@@ -1,3 +1,5 @@
+﻿using System.Diagnostics;
+using ActindoMiddleware.Application.Monitoring;
 using ActindoMiddleware.Application.Services;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
@@ -11,13 +13,16 @@ public sealed class ActindoCustomersController : ControllerBase
 {
     private readonly CustomerCreateService _customerCreateService;
     private readonly CustomerSaveService _customerSaveService;
+    private readonly IDashboardMetricsService _dashboardMetrics;
 
     public ActindoCustomersController(
         CustomerCreateService customerCreateService,
-        CustomerSaveService customerSaveService)
+        CustomerSaveService customerSaveService,
+        IDashboardMetricsService dashboardMetrics)
     {
         _customerCreateService = customerCreateService;
         _customerSaveService = customerSaveService;
+        _dashboardMetrics = dashboardMetrics;
     }
 
     [HttpPost("create")]
@@ -30,8 +35,38 @@ public sealed class ActindoCustomersController : ControllerBase
         if (request?.Customer == null || request.PrimaryAddress == null)
             return BadRequest("Customer and primaryAddress are required");
 
-        var result = await _customerCreateService.CreateAsync(request, cancellationToken);
-        return Created(string.Empty, result);
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Customer,
+            DashboardJobEndpoints.CustomerCreate,
+            DashboardPayloadSerializer.Serialize(request),
+            cancellationToken);
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+        try
+        {
+            var result = await _customerCreateService.CreateAsync(request, cancellationToken);
+            success = true;
+            responsePayload = DashboardPayloadSerializer.Serialize(result);
+            return Created(string.Empty, result);
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
     }
 
     [HttpPost("save")]
@@ -44,7 +79,37 @@ public sealed class ActindoCustomersController : ControllerBase
         if (request?.Customer == null || request.PrimaryAddress == null)
             return BadRequest("Customer and primaryAddress are required");
 
-        var result = await _customerSaveService.SaveAsync(request, cancellationToken);
-        return Ok(result);
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Customer,
+            DashboardJobEndpoints.CustomerSave,
+            DashboardPayloadSerializer.Serialize(request),
+            cancellationToken);
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+        try
+        {
+            var result = await _customerSaveService.SaveAsync(request, cancellationToken);
+            success = true;
+            responsePayload = DashboardPayloadSerializer.Serialize(result);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
     }
 }

@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ActindoMiddleware.Infrastructure.Actindo;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,11 +17,14 @@ public interface IAuthenticationService
     Task<OAuthToken> ExchangeAuthorizationCodeAsync(string code, string redirectUri, CancellationToken ct = default);
     Task<OAuthToken> RefreshAsync(string refreshToken, CancellationToken ct = default);
     Task<string> GetValidAccessTokenAsync(CancellationToken ct = default);
+    void ClearTokens();
+    OAuthStatusSnapshot GetStatusSnapshot();
 }
 
 public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly HttpClient _httpClient;
+    private readonly IActindoAvailabilityTracker _availabilityTracker;
     private readonly string _clientId;
     private readonly string _clientSecret;
     private readonly Uri _tokenEndpoint;
@@ -30,11 +34,14 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly ILogger<AuthenticationService> _logger;
 
     private OAuthToken? _currentToken;
+    private string? _lastErrorMessage;
+    private DateTimeOffset? _lastErrorAt;
 
     public AuthenticationService(
         HttpClient httpClient,
         IOptions<ActindoOAuthOptions> options,
         IHostEnvironment hostEnvironment,
+        IActindoAvailabilityTracker availabilityTracker,
         ILogger<AuthenticationService> logger)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -56,6 +63,7 @@ public sealed class AuthenticationService : IAuthenticationService
         _clientId = oauthOptions.ClientId;
         _clientSecret = oauthOptions.ClientSecret;
         _tokenEndpoint = new Uri(oauthOptions.TokenEndpoint);
+        _availabilityTracker = availabilityTracker;
         _logger = logger;
 
         _refreshTokenFilePath = ResolveRefreshTokenPath(
@@ -84,25 +92,38 @@ public sealed class AuthenticationService : IAuthenticationService
 
         using var content = new FormUrlEncodedContent(values);
         _logger.LogInformation("Exchange auth code at {Endpoint}", _tokenEndpoint);
-        using var response = await _httpClient.PostAsync(_tokenEndpoint, content, ct).ConfigureAwait(false);
-        var rawContent = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            throw new InvalidOperationException($"Token exchange failed ({(int)response.StatusCode}): {rawContent}");
+            using var response = await _httpClient.PostAsync(_tokenEndpoint, content, ct).ConfigureAwait(false);
+            var rawContent = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                SetLastError($"Token exchange failed ({(int)response.StatusCode}): {rawContent}");
+                _availabilityTracker.ReportFailure(new InvalidOperationException(rawContent));
+                throw new InvalidOperationException($"Token exchange failed ({(int)response.StatusCode}): {rawContent}");
+            }
+
+            var token = DeserializeToken(rawContent);
+            token.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn - 60);
+            _currentToken = token;
+            ClearLastError();
+            _availabilityTracker.ReportSuccess();
+            _logger.LogInformation("Authorization code exchange succeeded. ExpiresIn: {ExpiresIn}", token.ExpiresIn);
+
+            if (!string.IsNullOrEmpty(token.RefreshToken))
+            {
+                PersistRefreshToken(token.RefreshToken);
+            }
+
+            return token;
         }
-
-        var token = DeserializeToken(rawContent);
-        token.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn - 60);
-        _currentToken = token;
-        _logger.LogInformation("Authorization code exchange succeeded. ExpiresIn: {ExpiresIn}", token.ExpiresIn);
-
-        if (!string.IsNullOrEmpty(token.RefreshToken))
+        catch (Exception ex)
         {
-            PersistRefreshToken(token.RefreshToken);
+            SetLastError(ex.Message);
+            _availabilityTracker.ReportFailure(ex);
+            throw;
         }
-
-        return token;
     }
 
     public async Task<OAuthToken> RefreshAsync(
@@ -121,30 +142,43 @@ public sealed class AuthenticationService : IAuthenticationService
 
         using var content = new FormUrlEncodedContent(values);
         _logger.LogInformation("Refreshing access token at {Endpoint}", _tokenEndpoint);
-        using var response = await _httpClient.PostAsync(_tokenEndpoint, content, ct).ConfigureAwait(false);
-        var rawContent = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            throw new InvalidOperationException($"Token refresh failed ({(int)response.StatusCode}): {rawContent}");
+            using var response = await _httpClient.PostAsync(_tokenEndpoint, content, ct).ConfigureAwait(false);
+            var rawContent = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                SetLastError($"Token refresh failed ({(int)response.StatusCode}): {rawContent}");
+                _availabilityTracker.ReportFailure(new InvalidOperationException(rawContent));
+                throw new InvalidOperationException($"Token refresh failed ({(int)response.StatusCode}): {rawContent}");
+            }
+
+            var token = DeserializeToken(rawContent);
+            token.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn - 60);
+
+            if (!string.IsNullOrEmpty(token.RefreshToken))
+            {
+                PersistRefreshToken(token.RefreshToken);
+            }
+            else
+            {
+                token.RefreshToken = refreshToken;
+                PersistRefreshToken(refreshToken);
+            }
+
+            _currentToken = token;
+            ClearLastError();
+            _availabilityTracker.ReportSuccess();
+            _logger.LogInformation("Token refresh succeeded. New expiry in {ExpiresIn} seconds.", token.ExpiresIn);
+            return token;
         }
-
-        var token = DeserializeToken(rawContent);
-        token.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn - 60);
-
-        if (!string.IsNullOrEmpty(token.RefreshToken))
+        catch (Exception ex)
         {
-            PersistRefreshToken(token.RefreshToken);
+            SetLastError(ex.Message);
+            _availabilityTracker.ReportFailure(ex);
+            throw;
         }
-        else
-        {
-            token.RefreshToken = refreshToken;
-            PersistRefreshToken(refreshToken);
-        }
-
-        _currentToken = token;
-        _logger.LogInformation("Token refresh succeeded. New expiry in {ExpiresIn} seconds.", token.ExpiresIn);
-        return token;
     }
 
     public async Task<string> GetValidAccessTokenAsync(CancellationToken ct = default)
@@ -187,6 +221,38 @@ public sealed class AuthenticationService : IAuthenticationService
         return _currentToken.AccessToken;
     }
 
+    public OAuthStatusSnapshot GetStatusSnapshot()
+    {
+        var token = _currentToken;
+        return new OAuthStatusSnapshot
+        {
+            HasAccessToken = !string.IsNullOrWhiteSpace(token?.AccessToken),
+            HasRefreshToken = !string.IsNullOrWhiteSpace(token?.RefreshToken),
+            AccessTokenExpiresAt = token?.ExpiresAt,
+            LastErrorAt = _lastErrorAt,
+            LastErrorMessage = _lastErrorMessage
+        };
+    }
+
+    public void ClearTokens()
+    {
+        _logger.LogWarning("Clearing Actindo OAuth tokens and refresh token file.");
+        _currentToken = null;
+        ClearLastError();
+
+        try
+        {
+            if (File.Exists(_refreshTokenFilePath))
+            {
+                File.Delete(_refreshTokenFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete refresh token file at {Path}", _refreshTokenFilePath);
+        }
+    }
+
     private void LoadExistingRefreshToken()
     {
         if (!File.Exists(_refreshTokenFilePath))
@@ -220,6 +286,21 @@ public sealed class AuthenticationService : IAuthenticationService
     {
         return JsonSerializer.Deserialize<OAuthToken>(rawContent, _serializerOptions)
                ?? throw new InvalidOperationException("Empty token JSON received from Actindo.");
+    }
+
+    private void SetLastError(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            message = "Unknown OAuth error";
+
+        _lastErrorAt = DateTimeOffset.UtcNow;
+        _lastErrorMessage = message;
+    }
+
+    private void ClearLastError()
+    {
+        _lastErrorAt = null;
+        _lastErrorMessage = null;
     }
 
     private static string ResolveRefreshTokenPath(string configuredPath, string contentRoot)

@@ -1,10 +1,11 @@
-﻿using ActindoMiddleware.Application.Services;
+﻿using System.Diagnostics;
+using ActindoMiddleware.Application.Monitoring;
+using ActindoMiddleware.Application.Services;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ActindoMiddleware.Controllers;
-
 
 [ApiController]
 [Route("actindo/products")]
@@ -12,13 +13,16 @@ public sealed class ActindoProductsController : ControllerBase
 {
     private readonly ProductCreateService _productCreateService;
     private readonly ProductSaveService _productSaveService;
+    private readonly IDashboardMetricsService _dashboardMetrics;
 
     public ActindoProductsController(
         ProductCreateService productCreateService,
-        ProductSaveService productSaveService)
+        ProductSaveService productSaveService,
+        IDashboardMetricsService dashboardMetrics)
     {
         _productCreateService = productCreateService;
         _productSaveService = productSaveService;
+        _dashboardMetrics = dashboardMetrics;
     }
 
     /// <summary>
@@ -35,11 +39,41 @@ public sealed class ActindoProductsController : ControllerBase
         if (request?.Product == null)
             return BadRequest("Product payload is missing");
 
-        var result = await _productCreateService.CreateAsync(request, cancellationToken);
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Product,
+            DashboardJobEndpoints.ProductCreate,
+            DashboardPayloadSerializer.Serialize(request),
+            cancellationToken);
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+        try
+        {
+            var result = await _productCreateService.CreateAsync(request, cancellationToken);
+            success = true;
+            responsePayload = DashboardPayloadSerializer.Serialize(result);
 
-        return Created(
-            string.Empty, // kein Location-Header notwendig
-            result);
+            return Created(
+                string.Empty, // kein Location-Header notwendig
+                result);
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
     }
 
     /// <summary>
@@ -56,7 +90,37 @@ public sealed class ActindoProductsController : ControllerBase
         if (request?.Product == null)
             return BadRequest("Product payload is missing");
 
-        var result = await _productSaveService.SaveAsync(request, cancellationToken);
-        return Ok(result);
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Product,
+            DashboardJobEndpoints.ProductSave,
+            DashboardPayloadSerializer.Serialize(request),
+            cancellationToken);
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+        try
+        {
+            var result = await _productSaveService.SaveAsync(request, cancellationToken);
+            success = true;
+            responsePayload = DashboardPayloadSerializer.Serialize(result);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
     }
 }

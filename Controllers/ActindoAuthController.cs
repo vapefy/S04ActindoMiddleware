@@ -42,4 +42,12 @@ public sealed class ActindoAuthController : ControllerBase
             token.ExpiresIn
         });
     }
+
+    [HttpPost("reset")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult ResetTokens()
+    {
+        _authenticationService.ClearTokens();
+        return NoContent();
+    }
 }

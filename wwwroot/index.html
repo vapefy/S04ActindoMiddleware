@@ -1,0 +1,116 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Actindo Middleware Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="dashboard">
+    <nav class="nav">
+        <div class="nav__brand">Actindo Middleware</div>
+        <div class="nav__links">
+            <a class="nav__link nav__link--active" href="/">Dashboard</a>
+            <a class="nav__link" href="/jobs.html">Job Monitor</a>
+        </div>
+        <div class="nav__status">
+            <div class="status-pill" id="actindo-pill">
+                <span class="status-pill__dot"></span>
+                <span id="actindo-message">Actindo Status unbekannt</span>
+            </div>
+            <div class="status-pill" id="oauth-pill">
+                <span class="status-pill__dot"></span>
+                <span id="oauth-message">Status laedt ...</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page">
+        <section class="hero">
+            <div>
+                <h1 class="hero__headline">Realtime Sync Monitor</h1>
+                <p class="hero__subline">Koenigsblaues Cockpit fuer deine Actindo-Jobs</p>
+            </div>
+            <div class="hero__stat">
+                <span class="hero__stat-label">Aktive Jobs</span>
+                <span class="hero__stat-value" data-field="active-jobs">0</span>
+            </div>
+            <div class="hero__stat">
+                <span class="hero__stat-label">Letzte Aktualisierung</span>
+                <span class="hero__stat-value hero__stat-value--small" data-field="timestamp">-</span>
+            </div>
+        </section>
+
+        <section class="cards-grid">
+            <article class="metric-card" data-card="products">
+                <div class="metric-card__title">Produkte</div>
+                <div class="metric-card__numbers">
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Erfolgreich</span>
+                        <span class="metric-card__value" data-role="success">0</span>
+                    </div>
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Fehler</span>
+                        <span class="metric-card__value" data-role="failed">0</span>
+                    </div>
+                </div>
+                <p class="metric-card__trend">Avg <span data-role="avg">0.0s</span> pro Lauf</p>
+            </article>
+
+            <article class="metric-card" data-card="customers">
+                <div class="metric-card__title">Kunden</div>
+                <div class="metric-card__numbers">
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Erfolgreich</span>
+                        <span class="metric-card__value" data-role="success">0</span>
+                    </div>
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Fehler</span>
+                        <span class="metric-card__value" data-role="failed">0</span>
+                    </div>
+                </div>
+                <p class="metric-card__trend">Avg <span data-role="avg">0.0s</span> pro Lauf</p>
+            </article>
+
+            <article class="metric-card" data-card="transactions">
+                <div class="metric-card__title">Transaktionen</div>
+                <div class="metric-card__numbers">
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Erfolgreich</span>
+                        <span class="metric-card__value" data-role="success">0</span>
+                    </div>
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Fehler</span>
+                        <span class="metric-card__value" data-role="failed">0</span>
+                    </div>
+                </div>
+                <p class="metric-card__trend">Avg <span data-role="avg">0.0s</span> pro Lauf</p>
+            </article>
+
+            <article class="metric-card" data-card="media">
+                <div class="metric-card__title">Medien</div>
+                <div class="metric-card__numbers">
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Erfolgreich</span>
+                        <span class="metric-card__value" data-role="success">0</span>
+                    </div>
+                    <div class="metric-card__block">
+                        <span class="metric-card__label">Fehler</span>
+                        <span class="metric-card__value" data-role="failed">0</span>
+                    </div>
+                </div>
+                <p class="metric-card__trend">Avg <span data-role="avg">0.0s</span> pro Lauf</p>
+            </article>
+        </section>
+
+        <div class="timestamp-row">
+            <span>Powered by Actindo Middleware Dashboard</span>
+            <span data-field="timestamp"></span>
+        </div>
+
+        <div class="alert" data-role="alert"></div>
+    </div>
+
+    <script src="/dashboard.js" type="module"></script>
+</body>
+</html>
