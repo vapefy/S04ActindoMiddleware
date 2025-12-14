@@ -1,17 +1,18 @@
-﻿services:
+services:
   actindomiddleware:
-    user: root
     build:
       context: .
       dockerfile: Dockerfile
     container_name: actindomiddleware
     ports:
-      - "2233:8080"  # Äußerer Port 2233 -> Innerer Port 8080
+      - "2233:8080"  # Host 2233 -> Container 8080
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT=Information
       - ASPNETCORE_LOGGING__LOGLEVEL__MICROSOFT=Warning
-
+    volumes:
+      - ./App_Data:/app/App_Data
+      - ./.actindo-refresh-token:/app/.actindo-refresh-token
     networks:
       - monitoring_default
     restart: unless-stopped
