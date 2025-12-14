@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.Application.DTOs.Customers;
 using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
@@ -10,13 +11,16 @@ namespace ActindoMiddleware.Application.Services;
 public abstract class CustomerSynchronizationService
 {
     private readonly ActindoClient _client;
+    private readonly IActindoEndpointProvider _endpoints;
     private readonly ILogger _logger;
 
     protected CustomerSynchronizationService(
         ActindoClient client,
+        IActindoEndpointProvider endpoints,
         ILogger logger)
     {
         _client = client;
+        _endpoints = endpoints;
         _logger = logger;
     }
 
@@ -29,9 +33,10 @@ public abstract class CustomerSynchronizationService
         ArgumentNullException.ThrowIfNull(customer);
         ArgumentNullException.ThrowIfNull(primaryAddress);
 
+        var endpoints = await _endpoints.GetAsync(cancellationToken);
         var endpoint = useSaveEndpoint
-            ? ActindoEndpoints.SAVE_CUSTOMER
-            : ActindoEndpoints.CREATE_CUSTOMER;
+            ? endpoints.SaveCustomer
+            : endpoints.CreateCustomer;
 
         _logger.LogInformation(
             "{Action} Actindo customer {ShortName}",
@@ -56,7 +61,7 @@ public abstract class CustomerSynchronizationService
         primaryAddress.id = customerId;
 
         var primaryResponse = await _client.PostAsync(
-            ActindoEndpoints.SAVE_PRIMARY_ADDRESS,
+            endpoints.SavePrimaryAddress,
             new { primaryAddress },
             cancellationToken);
 

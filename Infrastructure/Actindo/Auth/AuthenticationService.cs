@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.Infrastructure.Actindo;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,58 +18,47 @@ public interface IAuthenticationService
     Task<string> GetValidAccessTokenAsync(CancellationToken ct = default);
     void ClearTokens();
     OAuthStatusSnapshot GetStatusSnapshot();
+    void InvalidateCache();
+    Task CheckAvailabilityAsync(CancellationToken ct = default);
 }
 
 public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly HttpClient _httpClient;
     private readonly IActindoAvailabilityTracker _availabilityTracker;
-    private readonly string _clientId;
-    private readonly string _clientSecret;
-    private readonly Uri _tokenEndpoint;
-    private readonly string _refreshTokenFilePath;
+    private readonly ISettingsStore _settingsStore;
+    private readonly ActindoOAuthOptions _oauthDefaults;
+    private string? _clientId;
+    private string? _clientSecret;
+    private Uri? _tokenEndpoint;
     private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly SemaphoreSlim _configLock = new(1, 1);
     private readonly ILogger<AuthenticationService> _logger;
 
     private OAuthToken? _currentToken;
     private string? _lastErrorMessage;
     private DateTimeOffset? _lastErrorAt;
+    private DateTimeOffset? _lastRefreshAttemptAt;
+    private bool _configLoaded;
 
     public AuthenticationService(
         HttpClient httpClient,
         IOptions<ActindoOAuthOptions> options,
-        IHostEnvironment hostEnvironment,
         IActindoAvailabilityTracker availabilityTracker,
+        ISettingsStore settingsStore,
         ILogger<AuthenticationService> logger)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(hostEnvironment);
+        ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(logger);
 
-        var oauthOptions = options.Value
-                           ?? throw new ArgumentException("Actindo OAuth options are not configured.", nameof(options));
-
-        if (string.IsNullOrWhiteSpace(oauthOptions.ClientId) ||
-            string.IsNullOrWhiteSpace(oauthOptions.ClientSecret) ||
-            string.IsNullOrWhiteSpace(oauthOptions.TokenEndpoint))
-        {
-            throw new InvalidOperationException("Actindo OAuth configuration is incomplete.");
-        }
-
         _httpClient = httpClient;
-        _clientId = oauthOptions.ClientId;
-        _clientSecret = oauthOptions.ClientSecret;
-        _tokenEndpoint = new Uri(oauthOptions.TokenEndpoint);
+        _settingsStore = settingsStore;
+        _oauthDefaults = options.Value ?? new ActindoOAuthOptions();
         _availabilityTracker = availabilityTracker;
         _logger = logger;
-
-        _refreshTokenFilePath = ResolveRefreshTokenPath(
-            oauthOptions.RefreshTokenFilePath,
-            hostEnvironment.ContentRootPath);
-
-        LoadExistingRefreshToken();
     }
 
     public async Task<OAuthToken> ExchangeAuthorizationCodeAsync(
@@ -80,6 +68,8 @@ public sealed class AuthenticationService : IAuthenticationService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
+
+        await EnsureConfigAsync(ct);
 
         var values = new Dictionary<string, string>
         {
@@ -113,7 +103,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
             if (!string.IsNullOrEmpty(token.RefreshToken))
             {
-                PersistRefreshToken(token.RefreshToken);
+                await PersistTokensAsync(token.RefreshToken, token.AccessToken, token.ExpiresAt, ct);
             }
 
             return token;
@@ -131,6 +121,7 @@ public sealed class AuthenticationService : IAuthenticationService
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+        await EnsureConfigAsync(ct);
 
         var values = new Dictionary<string, string>
         {
@@ -159,12 +150,12 @@ public sealed class AuthenticationService : IAuthenticationService
 
             if (!string.IsNullOrEmpty(token.RefreshToken))
             {
-                PersistRefreshToken(token.RefreshToken);
+                await PersistTokensAsync(token.RefreshToken, token.AccessToken, token.ExpiresAt, ct);
             }
             else
             {
                 token.RefreshToken = refreshToken;
-                PersistRefreshToken(refreshToken);
+                await PersistTokensAsync(refreshToken, token.AccessToken, token.ExpiresAt, ct);
             }
 
             _currentToken = token;
@@ -186,16 +177,27 @@ public sealed class AuthenticationService : IAuthenticationService
         await _refreshLock.WaitAsync(ct);
         try
         {
+            await EnsureConfigAsync(ct);
+
+            var now = DateTimeOffset.UtcNow;
             var shouldRefresh =
                 _currentToken == null ||
                 _currentToken.ExpiresAt == null ||
-                DateTimeOffset.UtcNow >= _currentToken.ExpiresAt.Value.AddMinutes(-2);
+                now >= _currentToken.ExpiresAt.Value.AddMinutes(-2);
+
+            var recentlyChecked = _lastRefreshAttemptAt.HasValue &&
+                                  now - _lastRefreshAttemptAt.Value <= TimeSpan.FromMinutes(2);
+
+            if (!shouldRefresh && recentlyChecked)
+            {
+                return _currentToken!.AccessToken!;
+            }
 
             if (shouldRefresh)
             {
                 if (string.IsNullOrWhiteSpace(_currentToken?.RefreshToken))
                 {
-                    LoadExistingRefreshToken();
+                    await ReloadTokenFromSettingsAsync(ct);
                 }
 
                 var refreshToken = _currentToken?.RefreshToken;
@@ -203,7 +205,12 @@ public sealed class AuthenticationService : IAuthenticationService
                 if (!string.IsNullOrWhiteSpace(refreshToken))
                 {
                     _logger.LogInformation("Refreshing token because current one is missing or expiring.");
+                    _lastRefreshAttemptAt = now;
                     await RefreshAsync(refreshToken!, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    _lastRefreshAttemptAt = now;
                 }
             }
         }
@@ -240,46 +247,43 @@ public sealed class AuthenticationService : IAuthenticationService
         _currentToken = null;
         ClearLastError();
 
+        _ = _settingsStore.SaveActindoSettingsAsync(new ActindoSettings(), CancellationToken.None);
+    }
+
+    public void InvalidateCache()
+    {
+        _configLoaded = false;
+        _clientId = null;
+        _clientSecret = null;
+        _tokenEndpoint = null;
+        _currentToken = null;
+    }
+
+    public async Task CheckAvailabilityAsync(CancellationToken ct = default)
+    {
         try
         {
-            if (File.Exists(_refreshTokenFilePath))
+            await EnsureConfigAsync(ct);
+            if (_tokenEndpoint == null)
+                return;
+
+            using var request = new HttpRequestMessage(HttpMethod.Head, _tokenEndpoint);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
             {
-                File.Delete(_refreshTokenFilePath);
+                // Even a non-success status means the host is reachable.
+                _availabilityTracker.ReportSuccess();
+            }
+            else
+            {
+                _availabilityTracker.ReportSuccess();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to delete refresh token file at {Path}", _refreshTokenFilePath);
+            _availabilityTracker.ReportFailure(ex);
         }
-    }
-
-    private void LoadExistingRefreshToken()
-    {
-        if (!File.Exists(_refreshTokenFilePath))
-            return;
-
-        var savedToken = File.ReadAllText(_refreshTokenFilePath).Trim();
-        if (string.IsNullOrEmpty(savedToken))
-            return;
-
-        _currentToken = new OAuthToken
-        {
-            RefreshToken = savedToken,
-            ExpiresAt = null
-        };
-        _logger.LogInformation("Loaded refresh token from {Path}", _refreshTokenFilePath);
-    }
-
-    private void PersistRefreshToken(string refreshToken)
-    {
-        var directory = Path.GetDirectoryName(_refreshTokenFilePath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        File.WriteAllText(_refreshTokenFilePath, refreshToken);
-        _logger.LogInformation("Persisted refresh token to {Path}", _refreshTokenFilePath);
     }
 
     private OAuthToken DeserializeToken(string rawContent)
@@ -303,13 +307,79 @@ public sealed class AuthenticationService : IAuthenticationService
         _lastErrorMessage = null;
     }
 
-    private static string ResolveRefreshTokenPath(string configuredPath, string contentRoot)
+    private async Task EnsureConfigAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(configuredPath))
-            configuredPath = ".actindo-refresh-token";
+        if (_configLoaded)
+            return;
 
-        return Path.IsPathRooted(configuredPath)
-            ? configuredPath
-            : Path.Combine(contentRoot, configuredPath);
+        await _configLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_configLoaded)
+                return;
+
+            var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+
+            _clientId = string.IsNullOrWhiteSpace(settings.ClientId) ? _oauthDefaults.ClientId : settings.ClientId;
+            _clientSecret = string.IsNullOrWhiteSpace(settings.ClientSecret) ? _oauthDefaults.ClientSecret : settings.ClientSecret;
+            var tokenEndpoint = string.IsNullOrWhiteSpace(settings.TokenEndpoint)
+                ? _oauthDefaults.TokenEndpoint
+                : settings.TokenEndpoint;
+            _tokenEndpoint = string.IsNullOrWhiteSpace(tokenEndpoint) ? null : new Uri(tokenEndpoint);
+
+            if (string.IsNullOrWhiteSpace(_clientId) ||
+                string.IsNullOrWhiteSpace(_clientSecret) ||
+                _tokenEndpoint == null)
+            {
+                throw new InvalidOperationException("Actindo OAuth configuration is incomplete.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.AccessToken) || !string.IsNullOrWhiteSpace(settings.RefreshToken))
+            {
+                _currentToken = new OAuthToken
+                {
+                    AccessToken = settings.AccessToken,
+                    RefreshToken = settings.RefreshToken,
+                    ExpiresAt = settings.AccessTokenExpiresAt
+                };
+            }
+
+            _configLoaded = true;
+        }
+        finally
+        {
+            _configLock.Release();
+        }
+    }
+
+    private async Task PersistTokensAsync(string? refreshToken, string? accessToken, DateTimeOffset? expiresAt, CancellationToken cancellationToken)
+    {
+        var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+        settings = new ActindoSettings
+        {
+            AccessToken = accessToken,
+            AccessTokenExpiresAt = expiresAt,
+            RefreshToken = refreshToken,
+            ClientId = string.IsNullOrWhiteSpace(settings.ClientId) ? _clientId : settings.ClientId,
+            ClientSecret = string.IsNullOrWhiteSpace(settings.ClientSecret) ? _clientSecret : settings.ClientSecret,
+            TokenEndpoint = string.IsNullOrWhiteSpace(settings.TokenEndpoint) ? _tokenEndpoint?.ToString() : settings.TokenEndpoint,
+            Endpoints = settings.Endpoints
+        };
+
+        await _settingsStore.SaveActindoSettingsAsync(settings, cancellationToken);
+    }
+
+    private async Task ReloadTokenFromSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(settings.AccessToken) || !string.IsNullOrWhiteSpace(settings.RefreshToken))
+        {
+            _currentToken = new OAuthToken
+            {
+                AccessToken = settings.AccessToken,
+                RefreshToken = settings.RefreshToken,
+                ExpiresAt = settings.AccessTokenExpiresAt
+            };
+        }
     }
 }

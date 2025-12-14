@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login - Actindo Middleware</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="login" class="login-page">
+    <main class="auth-shell">
+        <section class="auth-card auth-card--login">
+            <header class="auth-card__header">
+                <div class="auth-brand">
+                    <div class="auth-brand__mark"></div>
+                    <div>
+                        <div class="auth-brand__name">Actindo Middleware</div>
+                        <div class="auth-brand__tag">Koenigsblaues Control Center</div>
+                    </div>
+                </div>
+                <h1 class="auth-card__title">Login</h1>
+                <p class="auth-card__subtitle">Melde dich an, um Dashboard und Job Monitor zu nutzen.</p>
+            </header>
+
+            <div class="alert" data-role="alert"></div>
+
+            <form class="auth-form" data-role="login-form">
+                <label class="auth-form__label">
+                    Username
+                    <input class="auth-form__input" name="username" autocomplete="username" required />
+                </label>
+                <label class="auth-form__label">
+                    Password
+                    <input class="auth-form__input" name="password" type="password" autocomplete="current-password" required />
+                </label>
+                <button class="button auth-form__submit" type="submit">Login</button>
+            </form>
+            <p class="auth-card__subtitle">Noch kein Account? <a class="link" href="/register.html">Registrieren</a></p>
+
+            <section class="bootstrap bootstrap--card" data-role="bootstrap" hidden>
+                <div class="auth-divider"></div>
+                <h2 class="bootstrap__title">Initial Admin Setup</h2>
+                <p class="bootstrap__subtitle">Es existieren noch keine User. Lege jetzt den ersten Admin an.</p>
+                <form class="auth-form" data-role="bootstrap-form">
+                    <label class="auth-form__label">
+                        Admin Username
+                        <input class="auth-form__input" name="username" autocomplete="username" required />
+                    </label>
+                    <label class="auth-form__label">
+                        Admin Password
+                        <input class="auth-form__input" name="password" type="password" autocomplete="new-password" required />
+                    </label>
+                    <button class="button auth-form__submit" type="submit">Create Admin</button>
+                </form>
+            </section>
+        </section>
+    </main>
+
+    <script src="/login.js" type="module"></script>
+</body>
+</html>

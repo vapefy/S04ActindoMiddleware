@@ -1,14 +1,17 @@
 ﻿using System.Diagnostics;
 using ActindoMiddleware.Application.Monitoring;
+using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.Application.Services;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
 [Route("actindo/customer")]
+[Authorize(Policy = AuthPolicies.Write)]
 public sealed class ActindoCustomersController : ControllerBase
 {
     private readonly CustomerCreateService _customerCreateService;

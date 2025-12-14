@@ -2,15 +2,18 @@
 using System.Collections.Generic;
 using System.Linq;
 using ActindoMiddleware.Application.Monitoring;
+using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
 using ActindoMiddleware.Infrastructure.Actindo.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
 [Route("dashboard")]
+[Authorize(Policy = AuthPolicies.Read)]
 public sealed class DashboardController : ControllerBase
 {
     private static readonly TimeSpan SummaryWindow = TimeSpan.FromHours(24);
@@ -39,6 +42,7 @@ public sealed class DashboardController : ControllerBase
         try
         {
             await _authenticationService.GetValidAccessTokenAsync(cancellationToken);
+            await _authenticationService.CheckAvailabilityAsync(cancellationToken);
         }
         catch (Exception)
         {
@@ -92,6 +96,7 @@ public sealed class DashboardController : ControllerBase
 
     [HttpDelete("jobs")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [Authorize(Policy = AuthPolicies.Write)]
     public async Task<IActionResult> ClearJobs(CancellationToken cancellationToken = default)
     {
         await _metricsService.ClearJobHistoryAsync(cancellationToken);
@@ -101,6 +106,7 @@ public sealed class DashboardController : ControllerBase
     [HttpDelete("jobs/{jobId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Policy = AuthPolicies.Write)]
     public async Task<IActionResult> DeleteJob(Guid jobId, CancellationToken cancellationToken = default)
     {
         var job = await _metricsService.GetJobAsync(jobId, cancellationToken);
@@ -115,6 +121,7 @@ public sealed class DashboardController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Policy = AuthPolicies.Write)]
     public async Task<IActionResult> ReplayJob(
         Guid jobId,
         [FromBody] ReplayJobRequest? request,

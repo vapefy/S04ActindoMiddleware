@@ -1,13 +1,16 @@
 ﻿using System.Diagnostics;
 using ActindoMiddleware.Application.Monitoring;
+using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.Application.Services;
 using ActindoMiddleware.DTOs.Requests;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
 [Route("actindo/transactions")]
+[Authorize(Policy = AuthPolicies.Write)]
 public sealed class ActindoTransactionsController : ControllerBase
 {
     private readonly TransactionService _transactionService;

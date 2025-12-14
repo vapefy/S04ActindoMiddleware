@@ -34,4 +34,7 @@ public static class ActindoEndpoints
 
     public const string PRODUCT_FILES_SAVE =
         "https://schalke-dev.dev.actindo.com/Actindo.Modules.Actindo.PIM.Products.save";
+
+    public const string GET_PRODUCT_LIST =
+        "https://schalke-dev.dev.actindo.com/Actindo.Modules.Actindo.PIM.Products.getList";
 }

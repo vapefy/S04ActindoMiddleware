@@ -10,6 +10,9 @@ const oauthMessage = document.getElementById('oauth-message');
 const actindoPill = document.getElementById('actindo-pill');
 const actindoMessage = document.getElementById('actindo-message');
 const alertBox = document.querySelector('[data-role="alert"]');
+const logoutBtn = document.querySelector('[data-action="logout"]');
+const adminNavLinks = document.querySelectorAll('[data-nav-admin]');
+const userNameEl = document.querySelector('[data-user-name]');
 
 const jobsTableBody = document.querySelector('[data-jobs-table]');
 const jobDetailsSection = document.querySelector('[data-job-details]');
@@ -37,10 +40,48 @@ const pageHasJobs = Boolean(jobsTableBody);
 let jobsCache = [];
 let selectedJobId = null;
 let modalJobId = null;
+let currentUser = { authenticated: false, username: '', role: '' };
+let permissions = { canWrite: false, isAdmin: false };
+
+async function requireLogin() {
+    const response = await fetch('/auth/me', { cache: 'no-store' });
+    const me = await response.json();
+    currentUser = me ?? { authenticated: false };
+
+    if (!currentUser?.authenticated) {
+        const returnUrl = window.location.pathname || '/';
+        window.location.href = `/login.html?returnUrl=${encodeURIComponent(returnUrl)}`;
+        return false;
+    }
+
+    const role = String(currentUser.role ?? '').toLowerCase();
+    permissions = {
+        canWrite: role === 'write' || role === 'admin',
+        isAdmin: role === 'admin'
+    };
+
+    adminNavLinks.forEach((el) => {
+        if (el instanceof HTMLElement) el.hidden = !permissions.isAdmin;
+    });
+
+    if (logoutBtn instanceof HTMLElement) {
+        logoutBtn.hidden = false;
+    }
+    if (userNameEl instanceof HTMLElement) {
+        userNameEl.hidden = false;
+        userNameEl.textContent = currentUser.username ?? '';
+    }
+
+    return true;
+}
 
 async function loadSummary() {
     try {
         const response = await fetch(SUMMARY_ENDPOINT, { cache: 'no-store' });
+        if (response.status === 401 || response.status === 403) {
+            await requireLogin();
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Summary request failed (${response.status})`);
         }
@@ -57,6 +98,10 @@ async function loadJobs() {
     if (!pageHasJobs) return;
     try {
         const response = await fetch(JOBS_ENDPOINT, { cache: 'no-store' });
+        if (response.status === 401 || response.status === 403) {
+            await requireLogin();
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Jobs request failed (${response.status})`);
         }
@@ -122,7 +167,9 @@ function renderJobs() {
             <td>
                 <div class="jobs-table__actions">
                     <button class="button button--ghost" data-action="preview-job" data-job-id="${job.id}">Details</button>
-                    <button class="button button--danger" data-action="delete-job" data-job-id="${job.id}">Loeschen</button>
+                    ${permissions.canWrite
+                        ? `<button class="button button--danger" data-action="delete-job" data-job-id="${job.id}">Loeschen</button>`
+                        : ''}
                 </div>
             </td>
         `;
@@ -347,6 +394,10 @@ function hideError() {
 
 function openReplayModal() {
     if (!selectedJobId || !modal || !replayEditor) return;
+    if (!permissions.canWrite) {
+        showError('Keine Berechtigung: Replay ist nur fuer write/admin erlaubt.');
+        return;
+    }
     const job = jobsCache.find((item) => item.id === selectedJobId);
     if (!job) return;
 
@@ -370,6 +421,10 @@ function closeModal() {
 
 async function submitReplay() {
     if (!modalJobId || !replayEditor) return;
+    if (!permissions.canWrite) {
+        setModalFeedback('Keine Berechtigung: Replay ist nur fuer write/admin erlaubt.', true);
+        return;
+    }
     const payloadRaw = replayEditor.value.trim();
     if (!payloadRaw) {
         setModalFeedback('Payload darf nicht leer sein', true);
@@ -610,16 +665,33 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
-loadSummary();
-setInterval(loadSummary, REFRESH_INTERVAL_MS);
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+        await fetch('/auth/logout', { method: 'POST' });
+        window.location.href = '/login.html';
+    });
+}
 
-if (pageHasJobs) {
-    loadJobs();
-    setInterval(loadJobs, REFRESH_INTERVAL_MS);
+const loggedIn = await requireLogin();
+if (loggedIn) {
+    loadSummary();
+    setInterval(loadSummary, REFRESH_INTERVAL_MS);
+
+    if (pageHasJobs) {
+        loadJobs();
+        setInterval(loadJobs, REFRESH_INTERVAL_MS);
+
+        if (replayBtn) replayBtn.toggleAttribute('disabled', !permissions.canWrite);
+        if (clearHistoryBtn) clearHistoryBtn.toggleAttribute('disabled', !permissions.canWrite);
+    }
 }
 
 async function clearJobHistory() {
     if (!pageHasJobs) return;
+    if (!permissions.canWrite) {
+        showError('Keine Berechtigung: Loeschen ist nur fuer write/admin erlaubt.');
+        return;
+    }
     const confirmed = window.confirm('Gesamte Job-Historie wirklich loeschen?');
     if (!confirmed) return;
 
@@ -648,6 +720,10 @@ async function clearJobHistory() {
 async function deleteSingleJob(jobId) {
     if (!pageHasJobs) return;
     if (!jobId) return;
+    if (!permissions.canWrite) {
+        showError('Keine Berechtigung: Loeschen ist nur fuer write/admin erlaubt.');
+        return;
+    }
 
     const confirmed = window.confirm('Diesen Job wirklich loeschen?');
     if (!confirmed) return;

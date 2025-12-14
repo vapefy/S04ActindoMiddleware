@@ -37,6 +37,14 @@ public interface IDashboardMetricsService
         DashboardMetricType? typeFilter,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ProductListItem>> GetCreatedProductsAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CustomerListItem>> GetCreatedCustomersAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task<DashboardJobRecord?> GetJobAsync(
         Guid jobId,
         CancellationToken cancellationToken = default);
@@ -308,6 +316,108 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         }
 
         return jobs;
+    }
+
+    public async Task<IReadOnlyList<ProductListItem>> GetCreatedProductsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        var products = new List<ProductListItem>();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT Id,
+                   RequestPayload,
+                   ResponsePayload,
+                   COALESCE(CompletedAt, StartedAt) AS CompletedAt
+            FROM JobEvents
+            WHERE Endpoint = @endpoint AND Success = 1
+            ORDER BY COALESCE(CompletedAt, StartedAt) DESC
+            LIMIT @limit;
+            """;
+        command.Parameters.AddWithValue("@endpoint", DashboardJobEndpoints.ProductCreate);
+        command.Parameters.AddWithValue("@limit", Math.Max(1, limit));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var requestPayload = reader.GetString(1);
+            var responsePayload = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var completedAt = reader.IsDBNull(3)
+                ? (DateTimeOffset?)null
+                : DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture);
+
+            var (sku, name, variants) = TryParseProductFromRequest(requestPayload);
+            var productId = TryParseProductId(responsePayload);
+
+            products.Add(new ProductListItem
+            {
+                JobId = Guid.Parse(reader.GetString(0)),
+                ProductId = productId,
+                Sku = sku,
+                Name = name,
+                VariantCount = variants,
+                CreatedAt = completedAt
+            });
+        }
+
+        return products;
+    }
+
+    public async Task<IReadOnlyList<CustomerListItem>> GetCreatedCustomersAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        var customers = new List<CustomerListItem>();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT Id,
+                   RequestPayload,
+                   ResponsePayload,
+                   COALESCE(CompletedAt, StartedAt) AS CompletedAt
+            FROM JobEvents
+            WHERE Endpoint IN (@createEndpoint, @saveEndpoint) AND Success = 1
+            ORDER BY COALESCE(CompletedAt, StartedAt) DESC
+            LIMIT @limit;
+            """;
+        command.Parameters.AddWithValue("@createEndpoint", DashboardJobEndpoints.CustomerCreate);
+        command.Parameters.AddWithValue("@saveEndpoint", DashboardJobEndpoints.CustomerSave);
+        command.Parameters.AddWithValue("@limit", Math.Max(1, limit));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var requestPayload = reader.GetString(1);
+            var responsePayload = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var completedAt = reader.IsDBNull(3)
+                ? (DateTimeOffset?)null
+                : DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture);
+
+            var (name, debtor) = TryParseCustomerFromRequest(requestPayload);
+            var customerId = TryParseCustomerId(responsePayload);
+
+            customers.Add(new CustomerListItem
+            {
+                JobId = Guid.Parse(reader.GetString(0)),
+                CustomerId = customerId,
+                DebtorNumber = debtor,
+                Name = name,
+                CreatedAt = completedAt
+            });
+        }
+
+        return customers;
     }
 
     public async Task<DashboardJobRecord?> GetJobAsync(
@@ -633,6 +743,134 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
             Success = reader.GetInt32(5) == 1,
             CreatedAt = ParseDateTime(reader.GetString(6))
         };
+    }
+
+    private static (string sku, string name, int? variants) TryParseProductFromRequest(string requestPayload)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(requestPayload);
+            if (!doc.RootElement.TryGetProperty("product", out var product))
+                return (string.Empty, string.Empty, null);
+
+            var sku = product.TryGetProperty("sku", out var skuProp) ? skuProp.GetString() ?? string.Empty : string.Empty;
+            var name = GetFirstNonEmpty(
+                product,
+                "name",
+                "_pim_art_name__actindo_basic__de_DE",
+                "_pim_art_name__actindo_basic__en_US",
+                "_pim_art_nameactindo_basic_de_DE",
+                "_pim_art_nameactindo_basic_en_US");
+
+            int? variantCount = null;
+            if (product.TryGetProperty("variants", out var variantsElement) &&
+                variantsElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                variantCount = variantsElement.GetArrayLength();
+            }
+
+            return (sku, name, variantCount);
+        }
+        catch
+        {
+            return (string.Empty, string.Empty, null);
+        }
+    }
+
+    private static int? TryParseProductId(string? responsePayload)
+    {
+        if (string.IsNullOrWhiteSpace(responsePayload))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(responsePayload);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("productId", out var idProp) && idProp.TryGetInt32(out var id))
+            {
+                return id;
+            }
+
+            if (root.TryGetProperty("product", out var product))
+            {
+                if (product.TryGetProperty("id", out var pid) && pid.TryGetInt32(out var p))
+                    return p;
+                if (product.TryGetProperty("entityId", out var eid) && eid.TryGetInt32(out var e))
+                    return e;
+                if (pid.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(pid.GetString(), out var ps))
+                    return ps;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
+    private static int? TryParseCustomerId(string? responsePayload)
+    {
+        if (string.IsNullOrWhiteSpace(responsePayload))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(responsePayload);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("customerId", out var cid) && cid.TryGetInt32(out var id))
+                return id;
+
+            if (root.TryGetProperty("customer", out var customer))
+            {
+                if (customer.TryGetProperty("id", out var pid) && pid.TryGetInt32(out var p))
+                    return p;
+                if (customer.TryGetProperty("entityId", out var eid) && eid.TryGetInt32(out var e))
+                    return e;
+                if (pid.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(pid.GetString(), out var ps))
+                    return ps;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
+    private static (string name, string debtorNumber) TryParseCustomerFromRequest(string requestPayload)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(requestPayload);
+            if (!doc.RootElement.TryGetProperty("customer", out var customer))
+                return (string.Empty, string.Empty);
+
+            var name = customer.TryGetProperty("shortName", out var nameProp) ? nameProp.GetString() ?? string.Empty : string.Empty;
+            var debtor = customer.TryGetProperty("_customer_debitorennumber", out var debProp) ? debProp.GetString() ?? string.Empty : string.Empty;
+            return (name, debtor);
+        }
+        catch
+        {
+            return (string.Empty, string.Empty);
+        }
+    }
+
+    private static string GetFirstNonEmpty(System.Text.Json.JsonElement element, params string[] propertyNames)
+    {
+        foreach (var name in propertyNames)
+        {
+            if (element.TryGetProperty(name, out var value) &&
+                value.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var s = value.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
+                    return s;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static DateTimeOffset ParseDateTime(string value)

@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.Infrastructure.Actindo;
 
@@ -8,13 +9,15 @@ namespace ActindoMiddleware.Application.Services;
 public sealed class TransactionService
 {
     private readonly ActindoClient _client;
+    private readonly IActindoEndpointProvider _endpoints;
 
-    public TransactionService(ActindoClient client)
+    public TransactionService(ActindoClient client, IActindoEndpointProvider endpoints)
     {
         _client = client;
+        _endpoints = endpoints;
     }
 
-    public Task<JsonElement> GetTransactionsAsync(
+    public async Task<JsonElement> GetTransactionsAsync(
         GetTransactionsRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -53,8 +56,9 @@ public sealed class TransactionService
             limit = 50
         };
 
-        return _client.PostAsync(
-            ActindoEndpoints.GET_TRANSACTIONS,
+        var endpoints = await _endpoints.GetAsync(cancellationToken);
+        return await _client.PostAsync(
+            endpoints.GetTransactions,
             payload,
             cancellationToken);
     }

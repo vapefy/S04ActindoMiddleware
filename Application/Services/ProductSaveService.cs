@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
@@ -12,8 +13,9 @@ public sealed class ProductSaveService : ProductSynchronizationService
 {
     public ProductSaveService(
         ActindoClient client,
+        IActindoEndpointProvider endpoints,
         ILogger<ProductSaveService> logger)
-        : base(client, logger)
+        : base(client, endpoints, logger)
     {
     }
 

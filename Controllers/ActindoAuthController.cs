@@ -1,11 +1,14 @@
 using ActindoMiddleware.DTOs.Requests;
+using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.Infrastructure.Actindo.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
 [Route("actindo/auth")]
+[Authorize(Policy = AuthPolicies.Admin)]
 public sealed class ActindoAuthController : ControllerBase
 {
     private readonly IAuthenticationService _authenticationService;

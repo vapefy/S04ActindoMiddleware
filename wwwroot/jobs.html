@@ -11,7 +11,11 @@
         <div class="nav__brand">Actindo Middleware</div>
         <div class="nav__links">
             <a class="nav__link" href="/">Dashboard</a>
+            <a class="nav__link" href="/products.html">Products</a>
+            <a class="nav__link" href="/customers.html">Customers</a>
             <a class="nav__link nav__link--active" href="/jobs.html">Job Monitor</a>
+            <a class="nav__link" href="/users.html" data-nav-admin hidden>Users</a>
+            <a class="nav__link" href="/settings.html" data-nav-admin hidden>Settings</a>
         </div>
         <div class="nav__status">
             <div class="status-pill" id="actindo-pill">
@@ -22,6 +26,8 @@
                 <span class="status-pill__dot"></span>
                 <span id="oauth-message">Status laedt ...</span>
             </div>
+            <span class="nav__user" data-user-name hidden></span>
+            <button class="button button--ghost button--small" data-action="logout" hidden>Logout</button>
         </div>
     </nav>
 

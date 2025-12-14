@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.DTOs;
 using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
@@ -16,7 +17,9 @@ namespace ActindoMiddleware.Application.Services;
 public abstract class ProductSynchronizationService
 {
     private readonly ActindoClient _client;
+    private readonly IActindoEndpointProvider _endpoints;
     private readonly ILogger _logger;
+    private ActindoEndpointSet? _endpointCache;
     private const int MaxConcurrentVariantOperations = 4;
     private const int InventoryWorkerCount = 3;
 
@@ -27,9 +30,11 @@ public abstract class ProductSynchronizationService
 
     protected ProductSynchronizationService(
         ActindoClient client,
+        IActindoEndpointProvider endpoints,
         ILogger logger)
     {
         _client = client;
+        _endpoints = endpoints;
         _logger = logger;
     }
 
@@ -41,6 +46,8 @@ public abstract class ProductSynchronizationService
     {
         ArgumentNullException.ThrowIfNull(product);
 
+        var endpoints = await ResolveEndpointsAsync(cancellationToken);
+
         NormalizeProductAdditionalProperties(product);
 
         if (stripVariantSetInformation)
@@ -50,8 +57,8 @@ public abstract class ProductSynchronizationService
             NormalizeProductAdditionalProperties(variant);
 
         var productEndpoint = useSaveEndpoint
-            ? ActindoEndpoints.SAVE_PRODUCT
-            : ActindoEndpoints.CREATE_PRODUCT;
+            ? endpoints.SaveProduct
+            : endpoints.CreateProduct;
 
         _logger.LogInformation(
             "{Operation} product for SKU {Sku}",
@@ -62,10 +69,7 @@ public abstract class ProductSynchronizationService
         LogEndpointPayload(productEndpoint, masterPayload);
         var masterResponse = await _client.PostAsync(productEndpoint, masterPayload, cancellationToken);
 
-        var masterProductId = masterResponse
-            .GetProperty("product")
-            .GetProperty("id")
-            .GetInt32();
+        var masterProductId = ReadProductId(masterResponse);
 
         _logger.LogInformation(
             "Master product synced for SKU {Sku} with ID {Id}",
@@ -75,8 +79,8 @@ public abstract class ProductSynchronizationService
         foreach (var inventory in product.Inventory ?? Enumerable.Empty<InventoryDto>())
         {
             var inventoryPayload = BuildInventoryPayload(product.sku, inventory);
-            LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, inventoryPayload);
-            await _client.PostAsync(ActindoEndpoints.CREATE_INVENTORY, inventoryPayload, cancellationToken);
+            LogEndpointPayload(endpoints.CreateInventory, inventoryPayload);
+            await _client.PostAsync(endpoints.CreateInventory, inventoryPayload, cancellationToken);
             await Task.Delay(100, cancellationToken);
             _logger.LogInformation(
                 "Inventory posted for SKU {Sku} warehouse {Warehouse} compartment {Compartment}",
@@ -172,6 +176,7 @@ public abstract class ProductSynchronizationService
         await semaphore.WaitAsync(cancellationToken);
         try
         {
+            var endpoints = await ResolveEndpointsAsync(cancellationToken);
             _logger.LogInformation("Start variant sync for SKU {Sku}", variant.sku);
 
             if (IsIndiVariant(variant))
@@ -190,10 +195,7 @@ public abstract class ProductSynchronizationService
                 variantPayload,
                 cancellationToken);
 
-            var variantProductId = variantResponse
-                .GetProperty("product")
-                .GetProperty("id")
-                .GetInt32();
+            var variantProductId = ReadProductId(variantResponse);
 
             _logger.LogInformation(
                 "Variant synced for SKU {Sku} with ID {Id}",
@@ -205,9 +207,9 @@ public abstract class ProductSynchronizationService
                 variantProduct = new { id = variantProductId },
                 parentProduct = new { id = masterProductId }
             };
-            LogEndpointPayload(ActindoEndpoints.CREATE_RELATION, relationPayload);
+            LogEndpointPayload(endpoints.CreateRelation, relationPayload);
             await _client.PostAsync(
-                ActindoEndpoints.CREATE_RELATION,
+                endpoints.CreateRelation,
                 relationPayload,
                 cancellationToken);
 
@@ -308,6 +310,46 @@ public abstract class ProductSynchronizationService
         !string.IsNullOrWhiteSpace(variant._pim_varcode) &&
         variant._pim_varcode.Contains("INDI", StringComparison.OrdinalIgnoreCase);
 
+    private async Task<ActindoEndpointSet> ResolveEndpointsAsync(CancellationToken cancellationToken) =>
+        _endpointCache ??= await _endpoints.GetAsync(cancellationToken);
+
+    private static int ReadProductId(System.Text.Json.JsonElement responseRoot)
+    {
+        static int? TryExtractId(System.Text.Json.JsonElement element, string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var prop))
+                return null;
+
+            if (prop.ValueKind == System.Text.Json.JsonValueKind.Number && prop.TryGetInt32(out var number))
+                return number;
+
+            if (prop.ValueKind == System.Text.Json.JsonValueKind.String &&
+                int.TryParse(prop.GetString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            return null;
+        }
+
+        if (responseRoot.TryGetProperty("product", out var product))
+        {
+            var id = TryExtractId(product, "id") ?? TryExtractId(product, "entityId");
+            if (id.HasValue)
+                return id.Value;
+        }
+
+        var rootId = TryExtractId(responseRoot, "productId");
+        if (rootId.HasValue)
+            return rootId.Value;
+
+        var message = responseRoot.TryGetProperty("displayMessage", out var msg) ? msg.GetString() : null;
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(message)
+                ? "Actindo hat keine Produkt-ID zurueckgegeben."
+                : $"Actindo hat keine Produkt-ID zurueckgegeben: {message}");
+    }
+
     private static object BuildIndiMasterPayload(
         ProductDto masterProduct,
         ProductDto variant,
@@ -346,16 +388,14 @@ public abstract class ProductSynchronizationService
     {
         var masterSku = $"{masterProduct.sku}-INDI";
         var indiMasterPayload = new { product = BuildIndiMasterPayload(masterProduct, variant, masterSku) };
-        LogEndpointPayload(ActindoEndpoints.CREATE_PRODUCT, indiMasterPayload);
+        var endpoints = await ResolveEndpointsAsync(cancellationToken);
+        LogEndpointPayload(endpoints.CreateProduct, indiMasterPayload);
         var indiMasterResponse = await _client.PostAsync(
-            ActindoEndpoints.CREATE_PRODUCT,
+            endpoints.CreateProduct,
             indiMasterPayload,
             cancellationToken);
 
-        var indiMasterId = indiMasterResponse
-            .GetProperty("product")
-            .GetProperty("id")
-            .GetInt32();
+        var indiMasterId = ReadProductId(indiMasterResponse);
 
         _logger.LogInformation(
             "INDI master product created for SKU {Sku} with ID {Id}",
@@ -370,14 +410,16 @@ public abstract class ProductSynchronizationService
         ConcurrentBag<string> errors,
         CancellationToken cancellationToken)
     {
+        var endpoints = await ResolveEndpointsAsync(cancellationToken);
+
         await foreach (var workItem in reader.ReadAllAsync(cancellationToken))
         {
             try
             {
                 var payload = BuildInventoryPayload(workItem.Sku, workItem.Inventory);
-                LogEndpointPayload(ActindoEndpoints.CREATE_INVENTORY, payload);
+                LogEndpointPayload(endpoints.CreateInventory, payload);
                 await _client.PostAsync(
-                    ActindoEndpoints.CREATE_INVENTORY,
+                    endpoints.CreateInventory,
                     payload,
                     cancellationToken);
                 await Task.Delay(100, cancellationToken);
