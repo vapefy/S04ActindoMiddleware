@@ -245,7 +245,7 @@ function updateOAuth(oauth) {
         oauthPill.classList.add('status-pill--error');
     }
 
-    oauthMessage.textContent = oauth?.message ?? (state === 'ok' ? 'Token gueltig' : 'Status unbekannt');
+    oauthMessage.textContent = (state === 'ok' ? 'Token gueltig' : 'Status unbekannt');
 
     if (oauth?.expiresAt) {
         const expiresDate = new Date(oauth.expiresAt);
