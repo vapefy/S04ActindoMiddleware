@@ -16,6 +16,7 @@ public sealed class ActindoEndpointSet
     public required string CreateFile { get; init; }
     public required string ProductFilesSave { get; init; }
     public required string GetProductList { get; init; }
+    public required string DeleteProduct { get; init; }
 
     public static ActindoEndpointSet FromDictionary(IDictionary<string, string> values)
     {
@@ -37,7 +38,8 @@ public sealed class ActindoEndpointSet
             GetTransactions = Get("GET_TRANSACTIONS", ActindoEndpoints.GET_TRANSACTIONS),
             CreateFile = Get("CREATE_FILE", ActindoEndpoints.CREATE_FILE),
             ProductFilesSave = Get("PRODUCT_FILES_SAVE", ActindoEndpoints.PRODUCT_FILES_SAVE),
-            GetProductList = Get("GET_PRODUCT_LIST", ActindoEndpoints.GET_PRODUCT_LIST)
+            GetProductList = Get("GET_PRODUCT_LIST", ActindoEndpoints.GET_PRODUCT_LIST),
+            DeleteProduct = Get("DELETE_PRODUCT", ActindoEndpoints.DELETE_PRODUCT)
         };
     }
 }

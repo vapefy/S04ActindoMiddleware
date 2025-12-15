@@ -35,25 +35,7 @@ public sealed class ActindoProductListService
 
     public async Task<IReadOnlyList<ProductListItem>> GetActindoProductsAsync(CancellationToken cancellationToken = default)
     {
-        var endpoints = await _endpoints.GetAsync(cancellationToken);
-        var endpoint = endpoints.GetProductList;
-        var token = await _authService.GetValidAccessTokenAsync(cancellationToken);
-
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("Actindo product list failed {Status}: {Content}", (int)response.StatusCode, content);
-            throw new InvalidOperationException($"Actindo product list failed ({(int)response.StatusCode}): {content}");
-        }
-
-        using var doc = JsonDocument.Parse(content);
-        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            return Array.Empty<ProductListItem>();
-
-        var items = data.EnumerateArray().ToList();
+        var items = await FetchProductElementsAsync(cancellationToken);
 
         // Build lookup for variant counts
         var children = items
@@ -99,6 +81,55 @@ public sealed class ActindoProductListService
         return result;
     }
 
+    public async Task<IReadOnlyList<int>> GetVariantIdsForMasterAsync(
+        string masterSku,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(masterSku))
+            return Array.Empty<int>();
+
+        var items = await FetchProductElementsAsync(cancellationToken);
+        var prefix = masterSku + "-";
+
+        var ids = items
+            .Where(e => e.TryGetProperty("variantStatus", out var vs) && vs.GetString() == "child")
+            .Where(e =>
+            {
+                var sku = e.TryGetProperty("sku", out var skuProp) ? skuProp.GetString() ?? string.Empty : string.Empty;
+                return sku.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(e => TryReadInt(e, "id") ?? TryReadInt(e, "entityId"))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        return ids;
+    }
+
+    private async Task<List<JsonElement>> FetchProductElementsAsync(CancellationToken cancellationToken)
+    {
+        var endpoints = await _endpoints.GetAsync(cancellationToken);
+        var endpoint = endpoints.GetProductList;
+        var token = await _authService.GetValidAccessTokenAsync(cancellationToken);
+
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Actindo product list failed {Status}: {Content}", (int)response.StatusCode, content);
+            throw new InvalidOperationException($"Actindo product list failed ({(int)response.StatusCode}): {content}");
+        }
+
+        using var doc = JsonDocument.Parse(content);
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            return new List<JsonElement>();
+
+        return data.EnumerateArray().ToList();
+    }
+
     private static int? TryReadInt(JsonElement element, string property)
     {
         if (!element.TryGetProperty(property, out var prop))
@@ -113,4 +144,3 @@ public sealed class ActindoProductListService
         return null;
     }
 }
-

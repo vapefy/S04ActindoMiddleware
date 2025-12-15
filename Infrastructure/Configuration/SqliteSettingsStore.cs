@@ -157,7 +157,8 @@ CREATE TABLE IF NOT EXISTS Settings (
         ["GET_TRANSACTIONS"] = ActindoEndpoints.GET_TRANSACTIONS,
         ["CREATE_FILE"] = ActindoEndpoints.CREATE_FILE,
         ["PRODUCT_FILES_SAVE"] = ActindoEndpoints.PRODUCT_FILES_SAVE,
-        ["GET_PRODUCT_LIST"] = ActindoEndpoints.GET_PRODUCT_LIST
+        ["GET_PRODUCT_LIST"] = ActindoEndpoints.GET_PRODUCT_LIST,
+        ["DELETE_PRODUCT"] = ActindoEndpoints.DELETE_PRODUCT
     };
 
     private static Dictionary<string, string> MergeWithDefaults(IDictionary<string, string>? current)
