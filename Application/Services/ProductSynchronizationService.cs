@@ -19,6 +19,7 @@ public abstract class ProductSynchronizationService
     private readonly ActindoClient _client;
     private readonly IActindoEndpointProvider _endpoints;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _relationLock = new(1, 1);
     private ActindoEndpointSet? _endpointCache;
     private const int MaxConcurrentVariantOperations = 4;
     private const int InventoryWorkerCount = 3;
@@ -208,10 +209,22 @@ public abstract class ProductSynchronizationService
                 parentProduct = new { id = masterProductId }
             };
             LogEndpointPayload(endpoints.CreateRelation, relationPayload);
-            await _client.PostAsync(
-                endpoints.CreateRelation,
-                relationPayload,
-                cancellationToken);
+            await _relationLock.WaitAsync(cancellationToken);
+            try
+            {
+                await _client.PostAsync(
+                    endpoints.CreateRelation,
+                    relationPayload,
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Variant {Sku} linked to master {MasterId}",
+                    variant.sku,
+                    masterProductId);
+            }
+            finally
+            {
+                _relationLock.Release();
+            }
 
             foreach (var inventory in variant.Inventory ?? Enumerable.Empty<InventoryDto>())
             {
