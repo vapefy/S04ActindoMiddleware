@@ -34,7 +34,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Events.OnRedirectToLogin = context =>
         {
             if (context.Request.Path.StartsWithSegments("/dashboard") ||
-                context.Request.Path.StartsWithSegments("/actindo") ||
+                context.Request.Path.StartsWithSegments("/api/actindo") ||
                 context.Request.Path.StartsWithSegments("/users") ||
                 context.Request.Path.StartsWithSegments("/settings") ||
                 context.Request.Path.StartsWithSegments("/registrations") ||

@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
-[Route("actindo/products/image")]
+[Route("api/actindo/products/image")]
 [Authorize(Policy = AuthPolicies.Write)]
 public sealed class ActindoProductImagesController : ControllerBase
 {

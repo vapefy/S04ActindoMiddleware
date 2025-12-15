@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ActindoMiddleware.Controllers;
 
 [ApiController]
-[Route("actindo/customer")]
+[Route("api/actindo/customer")]
 [Authorize(Policy = AuthPolicies.Write)]
 public sealed class ActindoCustomersController : ControllerBase
 {
