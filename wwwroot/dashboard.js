@@ -106,7 +106,7 @@ async function loadJobs() {
     if (!pageHasJobs) return;
     try {
         const searchParam = currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : '';
-        const url = `${JOBS_ENDPOINT}?limit=${PAGE_SIZE}&page=${currentPage}${searchParam}`;
+        const url = `${JOBS_ENDPOINT}?limit=${PAGE_SIZE}&page=${currentPage}&onlyFailed=true${searchParam}`;
         const response = await fetch(url, { cache: 'no-store' });
         if (response.status === 401 || response.status === 403) {
             await requireLogin();

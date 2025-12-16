@@ -37,6 +37,7 @@ public interface IDashboardMetricsService
         int offset,
         DashboardMetricType? typeFilter,
         string? search,
+        bool onlyFailed,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ProductListItem>> GetCreatedProductsAsync(
@@ -279,6 +280,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         int offset,
         DashboardMetricType? typeFilter,
         string? search,
+        bool onlyFailed,
         CancellationToken cancellationToken = default)
     {
         EnsureDatabase();
@@ -297,6 +299,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                 SELECT COUNT(1)
                 FROM JobEvents
                 WHERE (@typeFilter IS NULL OR Type = @typeFilter)
+                  AND (@onlyFailed = 0 OR Success = 0)
                   AND (
                         @search IS NULL
                         OR lower(Endpoint) LIKE @searchLike
@@ -308,11 +311,12 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
             countCommand.Parameters.AddWithValue("@typeFilter", typeFilter.HasValue ? (object)(int)typeFilter.Value : DBNull.Value);
             countCommand.Parameters.AddWithValue("@search", (object?)searchTerm ?? DBNull.Value);
             countCommand.Parameters.AddWithValue("@searchLike", searchTerm is null ? DBNull.Value : $"%{searchTerm}%");
+            countCommand.Parameters.AddWithValue("@onlyFailed", onlyFailed ? 1 : 0);
 
             var totalScalar = await countCommand.ExecuteScalarAsync(cancellationToken);
             var total = Convert.ToInt64(totalScalar);
 
-            await FillJobs(connection, jobs, limit, offset, typeFilter, searchTerm, cancellationToken);
+            await FillJobs(connection, jobs, limit, offset, typeFilter, searchTerm, onlyFailed, cancellationToken);
             return new DashboardJobsResult(jobs, total);
         }
     }
@@ -324,6 +328,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         int offset,
         DashboardMetricType? typeFilter,
         string? search,
+        bool onlyFailed,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -341,6 +346,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                    ErrorPayload
             FROM JobEvents
             WHERE (@typeFilter IS NULL OR Type = @typeFilter)
+              AND (@onlyFailed = 0 OR Success = 0)
               AND (
                     @search IS NULL
                     OR lower(Endpoint) LIKE @searchLike
@@ -363,6 +369,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         }
         command.Parameters.AddWithValue("@search", (object?)search ?? DBNull.Value);
         command.Parameters.AddWithValue("@searchLike", search is null ? DBNull.Value : $"%{search}%");
+        command.Parameters.AddWithValue("@onlyFailed", onlyFailed ? 1 : 0);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

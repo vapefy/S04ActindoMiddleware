@@ -77,13 +77,14 @@ public sealed class DashboardController : ControllerBase
         [FromQuery] int limit = 20,
         [FromQuery] int page = 1,
         [FromQuery] string? search = null,
+        [FromQuery] bool onlyFailed = true,
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 200);
         page = Math.Max(1, page);
         var offset = (page - 1) * limit;
 
-        var jobsResult = await _metricsService.GetRecentJobsAsync(limit, offset, type, search, cancellationToken);
+        var jobsResult = await _metricsService.GetRecentJobsAsync(limit, offset, type, search, onlyFailed, cancellationToken);
         var jobDtos = new List<DashboardJobDto>(jobsResult.Jobs.Count);
         foreach (var job in jobsResult.Jobs)
         {
