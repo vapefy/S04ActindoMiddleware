@@ -54,6 +54,7 @@
                     <p class="hero__subline hero__subline--muted">Anklicken fuer Details, Bearbeitung &amp; Replay</p>
                 </div>
                 <div class="jobs-panel__actions">
+                    <input class="auth-form__input" type="text" placeholder="Suche nach SKU, ID oder Text" data-role="job-filter" />
                     <button class="button button--ghost" data-action="refresh-jobs">Refresh</button>
                     <button class="button button--danger" data-action="clear-history">Verlauf loeschen</button>
                 </div>
@@ -76,6 +77,11 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="table-pagination">
+                <button class="button button--ghost button--small" data-action="prev-page">Zurueck</button>
+                <span data-role="page-info">Seite 1 / 1</span>
+                <button class="button button--ghost button--small" data-action="next-page">Weiter</button>
             </div>
         </section>
 

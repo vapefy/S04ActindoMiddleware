@@ -32,9 +32,11 @@ public interface IDashboardMetricsService
         TimeSpan window,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<DashboardJobRecord>> GetRecentJobsAsync(
+    Task<DashboardJobsResult> GetRecentJobsAsync(
         int limit,
+        int offset,
         DashboardMetricType? typeFilter,
+        string? search,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ProductListItem>> GetCreatedProductsAsync(
@@ -102,6 +104,8 @@ public sealed record DashboardMetricsSnapshot
     public MetricSnapshot TransactionStats { get; init; } = MetricSnapshot.Empty;
     public MetricSnapshot MediaStats { get; init; } = MetricSnapshot.Empty;
 }
+
+public sealed record DashboardJobsResult(IReadOnlyList<DashboardJobRecord> Jobs, long Total);
 
 public sealed class DashboardMetricsService : IDashboardMetricsService
 {
@@ -270,9 +274,11 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         };
     }
 
-    public async Task<IReadOnlyList<DashboardJobRecord>> GetRecentJobsAsync(
+    public async Task<DashboardJobsResult> GetRecentJobsAsync(
         int limit,
+        int offset,
         DashboardMetricType? typeFilter,
+        string? search,
         CancellationToken cancellationToken = default)
     {
         EnsureDatabase();
@@ -281,6 +287,45 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        var searchTerm = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
+
+        // Total count
+        await using (var countCommand = connection.CreateCommand())
+        {
+            countCommand.CommandText =
+                """
+                SELECT COUNT(1)
+                FROM JobEvents
+                WHERE (@typeFilter IS NULL OR Type = @typeFilter)
+                  AND (
+                        @search IS NULL
+                        OR lower(Endpoint) LIKE @searchLike
+                        OR lower(COALESCE(RequestPayload,'')) LIKE @searchLike
+                        OR lower(COALESCE(ResponsePayload,'')) LIKE @searchLike
+                        OR lower(COALESCE(ErrorPayload,'')) LIKE @searchLike
+                      );
+                """;
+            countCommand.Parameters.AddWithValue("@typeFilter", typeFilter.HasValue ? (object)(int)typeFilter.Value : DBNull.Value);
+            countCommand.Parameters.AddWithValue("@search", (object?)searchTerm ?? DBNull.Value);
+            countCommand.Parameters.AddWithValue("@searchLike", searchTerm is null ? DBNull.Value : $"%{searchTerm}%");
+
+            var totalScalar = await countCommand.ExecuteScalarAsync(cancellationToken);
+            var total = Convert.ToInt64(totalScalar);
+
+            await FillJobs(connection, jobs, limit, offset, typeFilter, searchTerm, cancellationToken);
+            return new DashboardJobsResult(jobs, total);
+        }
+    }
+
+    private static async Task FillJobs(
+        SqliteConnection connection,
+        List<DashboardJobRecord> jobs,
+        int limit,
+        int offset,
+        DashboardMetricType? typeFilter,
+        string? search,
+        CancellationToken cancellationToken)
+    {
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
@@ -296,10 +341,18 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                    ErrorPayload
             FROM JobEvents
             WHERE (@typeFilter IS NULL OR Type = @typeFilter)
+              AND (
+                    @search IS NULL
+                    OR lower(Endpoint) LIKE @searchLike
+                    OR lower(COALESCE(RequestPayload,'')) LIKE @searchLike
+                    OR lower(COALESCE(ResponsePayload,'')) LIKE @searchLike
+                    OR lower(COALESCE(ErrorPayload,'')) LIKE @searchLike
+                  )
             ORDER BY COALESCE(CompletedAt, StartedAt) DESC
-            LIMIT @limit;
+            LIMIT @limit OFFSET @offset;
             """;
         command.Parameters.AddWithValue("@limit", Math.Max(1, limit));
+        command.Parameters.AddWithValue("@offset", Math.Max(0, offset));
         if (typeFilter.HasValue)
         {
             command.Parameters.AddWithValue("@typeFilter", (int)typeFilter.Value);
@@ -308,14 +361,14 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         {
             command.Parameters.AddWithValue("@typeFilter", DBNull.Value);
         }
+        command.Parameters.AddWithValue("@search", (object?)search ?? DBNull.Value);
+        command.Parameters.AddWithValue("@searchLike", search is null ? DBNull.Value : $"%{search}%");
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             jobs.Add(MapRecord(reader));
         }
-
-        return jobs;
     }
 
     public async Task<IReadOnlyList<ProductListItem>> GetCreatedProductsAsync(

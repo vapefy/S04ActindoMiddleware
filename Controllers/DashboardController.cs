@@ -75,12 +75,17 @@ public sealed class DashboardController : ControllerBase
     public async Task<ActionResult<DashboardJobsResponse>> GetJobs(
         [FromQuery] DashboardMetricType? type,
         [FromQuery] int limit = 20,
+        [FromQuery] int page = 1,
+        [FromQuery] string? search = null,
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 200);
-        var jobs = await _metricsService.GetRecentJobsAsync(limit, type, cancellationToken);
-        var jobDtos = new List<DashboardJobDto>(jobs.Count);
-        foreach (var job in jobs)
+        page = Math.Max(1, page);
+        var offset = (page - 1) * limit;
+
+        var jobsResult = await _metricsService.GetRecentJobsAsync(limit, offset, type, search, cancellationToken);
+        var jobDtos = new List<DashboardJobDto>(jobsResult.Jobs.Count);
+        foreach (var job in jobsResult.Jobs)
         {
             var logs = await _metricsService.GetActindoLogsAsync(job.Id, cancellationToken);
             jobDtos.Add(MapJob(job, logs));
@@ -88,7 +93,8 @@ public sealed class DashboardController : ControllerBase
 
         var response = new DashboardJobsResponse
         {
-            Jobs = jobDtos
+            Jobs = jobDtos,
+            Total = jobsResult.Total
         };
 
         return Ok(response);

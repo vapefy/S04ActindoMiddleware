@@ -1,5 +1,5 @@
 ﻿const SUMMARY_ENDPOINT = '/dashboard/summary';
-const JOBS_ENDPOINT = '/dashboard/jobs?limit=20';
+const JOBS_ENDPOINT = '/dashboard/jobs';
 const REFRESH_INTERVAL_MS = 15000;
 const CARD_KEYS = ['products', 'customers', 'transactions', 'media'];
 
@@ -29,6 +29,10 @@ const refreshJobsBtn = document.querySelector('[data-action="refresh-jobs"]');
 const clearHistoryBtn = document.querySelector('[data-action="clear-history"]');
 const copyJobRequestBtn = document.querySelector('[data-action="copy-job-request"]');
 const copyJobResponseBtn = document.querySelector('[data-action="copy-job-response"]');
+const jobFilterInput = document.querySelector('[data-role="job-filter"]');
+const pageInfo = document.querySelector('[data-role="page-info"]');
+const prevPageBtn = document.querySelector('[data-action="prev-page"]');
+const nextPageBtn = document.querySelector('[data-action="next-page"]');
 
 const modal = document.querySelector('[data-modal]');
 const replayEditor = document.getElementById('replay-editor');
@@ -38,6 +42,10 @@ const modalSubmitBtn = document.querySelector('[data-action="submit-replay"]');
 const pageHasJobs = Boolean(jobsTableBody);
 
 let jobsCache = [];
+let totalJobs = 0;
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let currentSearch = '';
 let selectedJobId = null;
 let modalJobId = null;
 let currentUser = { authenticated: false, username: '', role: '' };
@@ -97,7 +105,9 @@ async function loadSummary() {
 async function loadJobs() {
     if (!pageHasJobs) return;
     try {
-        const response = await fetch(JOBS_ENDPOINT, { cache: 'no-store' });
+        const searchParam = currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : '';
+        const url = `${JOBS_ENDPOINT}?limit=${PAGE_SIZE}&page=${currentPage}${searchParam}`;
+        const response = await fetch(url, { cache: 'no-store' });
         if (response.status === 401 || response.status === 403) {
             await requireLogin();
             return;
@@ -108,6 +118,9 @@ async function loadJobs() {
 
         const payload = await response.json();
         jobsCache = payload.jobs ?? [];
+        totalJobs = Number(payload.total ?? jobsCache.length);
+        const totalPages = Math.max(1, Math.ceil(totalJobs / PAGE_SIZE));
+        if (currentPage > totalPages) currentPage = totalPages;
         renderJobs();
         hideError();
     } catch (error) {
@@ -147,6 +160,7 @@ function renderJobs() {
     if (!jobsCache.length) {
         jobsTableBody.innerHTML = '<tr><td colspan="6">Noch keine Jobs vorhanden.</td></tr>';
         if (jobDetailsSection) jobDetailsSection.hidden = true;
+        updatePagination();
         return;
     }
 
@@ -205,6 +219,8 @@ function renderJobs() {
             jobDetailsSection.hidden = true;
         }
     }
+
+    updatePagination();
 }
 
 function renderStatusBadge(job) {
@@ -337,6 +353,19 @@ function prettifyJson(payload) {
     } catch {
         return payload;
     }
+}
+
+function updatePagination() {
+    const totalPages = Math.max(1, Math.ceil(totalJobs / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const safePage = Math.max(1, Math.min(currentPage, totalPages));
+    currentPage = safePage;
+
+    if (pageInfo) {
+        pageInfo.textContent = `Seite ${safePage} / ${totalPages}`;
+    }
+    if (prevPageBtn) prevPageBtn.disabled = safePage <= 1;
+    if (nextPageBtn) nextPageBtn.disabled = safePage >= totalPages;
 }
 
 function formatDuration(ms) {
@@ -622,6 +651,34 @@ if (refreshJobsBtn) {
     });
 }
 
+let searchDebounce;
+if (jobFilterInput) {
+    jobFilterInput.addEventListener('input', () => {
+        const term = jobFilterInput.value.trim();
+        currentSearch = term;
+        currentPage = 1;
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => loadJobs(), 250);
+    });
+}
+
+if (prevPageBtn) {
+    prevPageBtn.addEventListener('click', () => {
+        if (currentPage <= 1) return;
+        currentPage -= 1;
+        loadJobs();
+    });
+}
+
+if (nextPageBtn) {
+    nextPageBtn.addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(totalJobs / PAGE_SIZE));
+        if (currentPage >= totalPages) return;
+        currentPage += 1;
+        loadJobs();
+    });
+}
+
 if (clearHistoryBtn) {
     clearHistoryBtn.addEventListener('click', () => {
         clearJobHistory();
@@ -702,6 +759,7 @@ async function clearJobHistory() {
 
         jobsCache = [];
         selectedJobId = null;
+        totalJobs = 0;
         renderJobs();
         if (jobFeedbackEl) {
             jobFeedbackEl.textContent = 'Job-Historie wurde geloescht.';
@@ -734,6 +792,7 @@ async function deleteSingleJob(jobId) {
         }
 
         jobsCache = jobsCache.filter((job) => job.id !== jobId);
+        totalJobs = Math.max(0, totalJobs - 1);
         if (selectedJobId === jobId) {
             selectedJobId = jobsCache.length ? jobsCache[0].id : null;
         }

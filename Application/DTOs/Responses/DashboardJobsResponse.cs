@@ -7,6 +7,7 @@ namespace ActindoMiddleware.DTOs.Responses;
 public sealed class DashboardJobsResponse
 {
     public IReadOnlyCollection<DashboardJobDto> Jobs { get; init; } = Array.Empty<DashboardJobDto>();
+    public long Total { get; init; }
 }
 
 public sealed class DashboardJobDto
