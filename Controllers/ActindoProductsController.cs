@@ -2,8 +2,10 @@
 using ActindoMiddleware.Application.Monitoring;
 using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.Application.Services;
+using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
+using ActindoMiddleware.Infrastructure.Actindo;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,15 +19,21 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly ProductCreateService _productCreateService;
     private readonly ProductSaveService _productSaveService;
     private readonly IDashboardMetricsService _dashboardMetrics;
+    private readonly ActindoClient _actindoClient;
+    private readonly IActindoEndpointProvider _endpointProvider;
 
     public ActindoProductsController(
         ProductCreateService productCreateService,
         ProductSaveService productSaveService,
-        IDashboardMetricsService dashboardMetrics)
+        IDashboardMetricsService dashboardMetrics,
+        ActindoClient actindoClient,
+        IActindoEndpointProvider endpointProvider)
     {
         _productCreateService = productCreateService;
         _productSaveService = productSaveService;
         _dashboardMetrics = dashboardMetrics;
+        _actindoClient = actindoClient;
+        _endpointProvider = endpointProvider;
     }
 
     /// <summary>
@@ -108,6 +116,77 @@ public sealed class ActindoProductsController : ControllerBase
             var result = await _productSaveService.SaveAsync(request, cancellationToken);
             success = true;
             responsePayload = DashboardPayloadSerializer.Serialize(result);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
+    }
+
+    [HttpPost("inventory")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AdjustInventory(
+        [FromBody] AdjustInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null ||
+            string.IsNullOrWhiteSpace(request.Sku) ||
+            request.Stock is null ||
+            request.WarehouseId is null)
+        {
+            return BadRequest("sku, stock und warehouse_id sind erforderlich.");
+        }
+
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Product,
+            DashboardJobEndpoints.ProductInventory,
+            DashboardPayloadSerializer.Serialize(request),
+            cancellationToken);
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+
+        try
+        {
+            var endpoints = await _endpointProvider.GetAsync(cancellationToken);
+            var payload = new
+            {
+                inventory = new
+                {
+                    sku = request.Sku,
+                    synchronousSync = true,
+                    compareOldValue = true,
+                    _fulfillment_inventory_amount = request.Stock,
+                    _fulfillment_inventory_warehouse = request.WarehouseId,
+                    _fulfillment_inventory_compartment = 111,
+                    _fulfillment_inventory_postingType = new[] { new { id = 571 } },
+                    _fulfillment_inventory_postingText = "Bestandseinbuchung",
+                    _fulfillment_inventory_origin = "Middleware import"
+                }
+            };
+
+            var result = await _actindoClient.PostAsync(
+                endpoints.CreateInventory,
+                payload,
+                cancellationToken);
+
+            success = true;
+            responsePayload = result.GetRawText();
             return Ok(result);
         }
         catch (Exception ex)
