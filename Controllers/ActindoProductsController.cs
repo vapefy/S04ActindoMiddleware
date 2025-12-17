@@ -142,12 +142,9 @@ public sealed class ActindoProductsController : ControllerBase
         [FromBody] AdjustInventoryRequest request,
         CancellationToken cancellationToken)
     {
-        if (request is null ||
-            string.IsNullOrWhiteSpace(request.Sku) ||
-            request.Stock is null ||
-            request.WarehouseId is null)
+        if (request?.Inventories == null || request.Inventories.Count == 0)
         {
-            return BadRequest("sku, stock und warehouse_id sind erforderlich.");
+            return BadRequest("inventories darf nicht leer sein.");
         }
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
@@ -164,30 +161,47 @@ public sealed class ActindoProductsController : ControllerBase
         try
         {
             var endpoints = await _endpointProvider.GetAsync(cancellationToken);
-            var payload = new
-            {
-                inventory = new
-                {
-                    sku = request.Sku,
-                    synchronousSync = true,
-                    compareOldValue = true,
-                    _fulfillment_inventory_amount = request.Stock,
-                    _fulfillment_inventory_warehouse = request.WarehouseId,
-                    _fulfillment_inventory_compartment = 111,
-                    _fulfillment_inventory_postingType = new[] { new { id = 571 } },
-                    _fulfillment_inventory_postingText = "Bestandseinbuchung",
-                    _fulfillment_inventory_origin = "Middleware import"
-                }
-            };
+            var results = new List<object>();
 
-            var result = await _actindoClient.PostAsync(
-                endpoints.CreateInventory,
-                payload,
-                cancellationToken);
+            foreach (var kvp in request.Inventories)
+            {
+                var sku = kvp.Key;
+                var entry = kvp.Value;
+                if (string.IsNullOrWhiteSpace(sku) || entry?.Stocks == null || entry.Stocks.Count == 0)
+                    continue;
+
+                foreach (var stockEntry in entry.Stocks)
+                {
+                    if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
+                        continue;
+
+                    var payload = new
+                    {
+                        inventory = new
+                        {
+                            sku = sku,
+                            synchronousSync = true,
+                            compareOldValue = true,
+                            _fulfillment_inventory_amount = stockEntry.Stock,
+                            _fulfillment_inventory_warehouse = stockEntry.WarehouseId,
+                            _fulfillment_inventory_compartment = 111,
+                            _fulfillment_inventory_postingType = new[] { new { id = 571 } },
+                            _fulfillment_inventory_postingText = "Bestandseinbuchung",
+                            _fulfillment_inventory_origin = "Middleware import"
+                        }
+                    };
+
+                    var result = await _actindoClient.PostAsync(
+                        endpoints.CreateInventory,
+                        payload,
+                        cancellationToken);
+                    results.Add(new { sku, warehouseId = stockEntry.WarehouseId, response = result });
+                }
+            }
 
             success = true;
-            responsePayload = result.GetRawText();
-            return Ok(result);
+            responsePayload = DashboardPayloadSerializer.Serialize(results);
+            return Ok(new { results });
         }
         catch (Exception ex)
         {
