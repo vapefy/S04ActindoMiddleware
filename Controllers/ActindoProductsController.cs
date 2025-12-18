@@ -254,7 +254,7 @@ public sealed class ActindoProductsController : ControllerBase
             {
                 foreach (var variant in variantPrices.EnumerateArray())
                 {
-                    var forwarded = new { product = variant };
+                    var forwarded = new { product = variant, thaw = true };
                     var resp = await _actindoClient.PostAsync(
                         endpoints.SaveProduct,
                         forwarded,
@@ -264,7 +264,7 @@ public sealed class ActindoProductsController : ControllerBase
             }
             else
             {
-                var forwarded = new { product = body };
+                var forwarded = new { product = body, thaw = true };
                 var resp = await _actindoClient.PostAsync(
                     endpoints.SaveProduct,
                     forwarded,
