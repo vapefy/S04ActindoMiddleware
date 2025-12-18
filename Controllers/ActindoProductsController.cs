@@ -8,6 +8,7 @@ using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace ActindoMiddleware.Controllers;
 
@@ -197,6 +198,76 @@ public sealed class ActindoProductsController : ControllerBase
                         cancellationToken);
                     results.Add(new { sku, warehouseId = stockEntry.WarehouseId, response = result });
                 }
+            }
+
+            success = true;
+            responsePayload = DashboardPayloadSerializer.Serialize(results);
+            return Ok(new { results });
+        }
+        catch (Exception ex)
+        {
+            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            throw;
+        }
+        finally
+        {
+            await _dashboardMetrics.CompleteJobAsync(
+                jobHandle,
+                success,
+                stopwatch.Elapsed,
+                responsePayload,
+                errorPayload,
+                cancellationToken);
+        }
+    }
+
+    [HttpPost("price")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePrices(
+        [FromBody] JsonElement body,
+        CancellationToken cancellationToken)
+    {
+        if (body.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            return BadRequest("Payload ist erforderlich.");
+
+        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+            DashboardMetricType.Product,
+            DashboardJobEndpoints.ProductPrice,
+            body.GetRawText(),
+            cancellationToken);
+
+        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        var stopwatch = Stopwatch.StartNew();
+        var success = false;
+        string? responsePayload = null;
+        string? errorPayload = null;
+
+        try
+        {
+            var endpoints = await _endpointProvider.GetAsync(cancellationToken);
+            var results = new List<JsonElement>();
+
+            if (body.TryGetProperty("variant_prices", out var variantPrices) &&
+                variantPrices.ValueKind == JsonValueKind.Array &&
+                variantPrices.GetArrayLength() > 0)
+            {
+                foreach (var variant in variantPrices.EnumerateArray())
+                {
+                    var resp = await _actindoClient.PostAsync(
+                        endpoints.SaveProduct,
+                        variant,
+                        cancellationToken);
+                    results.Add(resp);
+                }
+            }
+            else
+            {
+                var resp = await _actindoClient.PostAsync(
+                    endpoints.SaveProduct,
+                    body,
+                    cancellationToken);
+                results.Add(resp);
             }
 
             success = true;
