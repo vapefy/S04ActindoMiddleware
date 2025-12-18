@@ -254,18 +254,20 @@ public sealed class ActindoProductsController : ControllerBase
             {
                 foreach (var variant in variantPrices.EnumerateArray())
                 {
+                    var forwarded = new { product = variant };
                     var resp = await _actindoClient.PostAsync(
                         endpoints.SaveProduct,
-                        variant,
+                        forwarded,
                         cancellationToken);
                     results.Add(resp);
                 }
             }
             else
             {
+                var forwarded = new { product = body };
                 var resp = await _actindoClient.PostAsync(
                     endpoints.SaveProduct,
-                    body,
+                    forwarded,
                     cancellationToken);
                 results.Add(resp);
             }
