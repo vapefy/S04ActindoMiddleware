@@ -40,13 +40,13 @@ public sealed class ProductDto
     public string? _pim_flock_number { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? _pim_flock_option { get; set; }
+    public object? _pim_flock_option { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? _pim_aermel_logo { get; set; }
+    public object? _pim_aermel_logo { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? _pim_aermel_logo_links { get; set; }
+    public object? _pim_aermel_logo_links { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? _pim_ean { get; set; }
