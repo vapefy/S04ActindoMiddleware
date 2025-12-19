@@ -9,6 +9,7 @@ using ActindoMiddleware.Infrastructure.Actindo;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace ActindoMiddleware.Controllers;
 
@@ -22,6 +23,8 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly IDashboardMetricsService _dashboardMetrics;
     private readonly ActindoClient _actindoClient;
     private readonly IActindoEndpointProvider _endpointProvider;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> InventoryLocks = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxConcurrentInventoryPosts = 8;
 
     public ActindoProductsController(
         ProductCreateService productCreateService,
@@ -162,7 +165,8 @@ public sealed class ActindoProductsController : ControllerBase
         try
         {
             var endpoints = await _endpointProvider.GetAsync(cancellationToken);
-            var results = new List<object>();
+            var results = new ConcurrentBag<object>();
+            var workItems = new List<(string sku, InventoryStock stock)>();
 
             foreach (var kvp in request.Inventories)
             {
@@ -175,16 +179,36 @@ public sealed class ActindoProductsController : ControllerBase
                 {
                     if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
                         continue;
+                    workItems.Add((sku, stockEntry));
+                }
+            }
+
+            var throttler = new SemaphoreSlim(MaxConcurrentInventoryPosts);
+            var tasks = workItems.Select(async item =>
+            {
+                await throttler.WaitAsync(cancellationToken);
+                var lockKeys = new[] { $"sku:{item.sku}", $"wh:{item.stock.WarehouseId}" }
+                    .OrderBy(k => k, StringComparer.Ordinal)
+                    .ToArray();
+                var acquired = new List<SemaphoreSlim>(2);
+                try
+                {
+                    foreach (var key in lockKeys)
+                    {
+                        var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+                        await sem.WaitAsync(cancellationToken);
+                        acquired.Add(sem);
+                    }
 
                     var payload = new
                     {
                         inventory = new
                         {
-                            sku = sku,
+                            sku = item.sku,
                             synchronousSync = true,
                             compareOldValue = true,
-                            _fulfillment_inventory_amount = stockEntry.Stock,
-                            _fulfillment_inventory_warehouse = stockEntry.WarehouseId,
+                            _fulfillment_inventory_amount = item.stock.Stock,
+                            _fulfillment_inventory_warehouse = item.stock.WarehouseId,
                             _fulfillment_inventory_compartment = 111,
                             _fulfillment_inventory_postingType = new[] { new { id = 571 } },
                             _fulfillment_inventory_postingText = "Bestandseinbuchung",
@@ -196,9 +220,19 @@ public sealed class ActindoProductsController : ControllerBase
                         endpoints.CreateInventory,
                         payload,
                         cancellationToken);
-                    results.Add(new { sku, warehouseId = stockEntry.WarehouseId, response = result });
+                    results.Add(new { sku = item.sku, warehouseId = item.stock.WarehouseId, response = result });
                 }
-            }
+                finally
+                {
+                    foreach (var sem in acquired)
+                    {
+                        sem.Release();
+                    }
+                    throttler.Release();
+                }
+            }).ToArray();
+
+            await Task.WhenAll(tasks);
 
             success = true;
             responsePayload = DashboardPayloadSerializer.Serialize(results);
