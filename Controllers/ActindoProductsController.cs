@@ -187,19 +187,11 @@ public sealed class ActindoProductsController : ControllerBase
             var tasks = workItems.Select(async item =>
             {
                 await throttler.WaitAsync(cancellationToken);
-                var lockKeys = new[] { $"sku:{item.sku}", $"wh:{item.stock.WarehouseId}" }
-                    .OrderBy(k => k, StringComparer.Ordinal)
-                    .ToArray();
-                var acquired = new List<SemaphoreSlim>(2);
+                var key = $"wh:{item.stock.WarehouseId}";
+                var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+                await sem.WaitAsync(cancellationToken);
                 try
                 {
-                    foreach (var key in lockKeys)
-                    {
-                        var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-                        await sem.WaitAsync(cancellationToken);
-                        acquired.Add(sem);
-                    }
-
                     var payload = new
                     {
                         inventory = new
@@ -224,10 +216,7 @@ public sealed class ActindoProductsController : ControllerBase
                 }
                 finally
                 {
-                    foreach (var sem in acquired)
-                    {
-                        sem.Release();
-                    }
+                    sem.Release();
                     throttler.Release();
                 }
             }).ToArray();
