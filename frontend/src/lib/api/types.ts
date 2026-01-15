@@ -94,6 +94,14 @@ export interface ProductListItem {
 	variantStatus: VariantStatus;
 	parentSku: string | null;
 	variantCode: string | null;
+	// Preis- und Bestandsdaten
+	lastPrice: number | null;
+	lastPriceEmployee: number | null;
+	lastPriceMember: number | null;
+	lastStock: number | null;
+	lastWarehouseId: number | null;
+	lastPriceUpdatedAt: string | null;
+	lastStockUpdatedAt: string | null;
 }
 
 // Customer Types

@@ -59,6 +59,26 @@ public interface IDashboardMetricsService
         string? variantCode,
         CancellationToken cancellationToken = default);
 
+    Task UpdateProductPriceAsync(
+        string sku,
+        decimal? price,
+        decimal? priceEmployee,
+        decimal? priceMember,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateProductPriceByActindoIdAsync(
+        int actindoProductId,
+        decimal? price,
+        decimal? priceEmployee,
+        decimal? priceMember,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateProductStockAsync(
+        string sku,
+        int stock,
+        int warehouseId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<CustomerListItem>> GetCreatedCustomersAsync(
         int limit,
         CancellationToken cancellationToken = default);
@@ -412,7 +432,14 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                      p.ParentSku,
                      p.VariantCode,
                      p.CreatedAt,
-                     (SELECT COUNT(*) FROM Products c WHERE c.ParentSku = p.Sku) AS VariantCount
+                     (SELECT COUNT(*) FROM Products c WHERE c.ParentSku = p.Sku) AS VariantCount,
+                     p.LastPrice,
+                     p.LastPriceEmployee,
+                     p.LastPriceMember,
+                     p.LastStock,
+                     p.LastWarehouseId,
+                     p.LastPriceUpdatedAt,
+                     p.LastStockUpdatedAt
               FROM Products p
               ORDER BY p.CreatedAt DESC
               LIMIT @limit;
@@ -427,7 +454,14 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                      p.ParentSku,
                      p.VariantCode,
                      p.CreatedAt,
-                     (SELECT COUNT(*) FROM Products c WHERE c.ParentSku = p.Sku) AS VariantCount
+                     (SELECT COUNT(*) FROM Products c WHERE c.ParentSku = p.Sku) AS VariantCount,
+                     p.LastPrice,
+                     p.LastPriceEmployee,
+                     p.LastPriceMember,
+                     p.LastStock,
+                     p.LastWarehouseId,
+                     p.LastPriceUpdatedAt,
+                     p.LastStockUpdatedAt
               FROM Products p
               WHERE p.VariantStatus != 'child'
               ORDER BY p.CreatedAt DESC
@@ -438,30 +472,56 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var createdAtStr = reader.IsDBNull(8) ? null : reader.GetString(8);
-            DateTimeOffset? createdAt = null;
-            if (createdAtStr != null && DateTimeOffset.TryParse(createdAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-            {
-                createdAt = parsed;
-            }
-
-            var variantCount = reader.IsDBNull(9) ? (int?)null : reader.GetInt32(9);
-
-            products.Add(new ProductListItem
-            {
-                JobId = Guid.Parse(reader.GetString(1)),
-                ProductId = reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                Sku = reader.GetString(3),
-                Name = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
-                VariantStatus = reader.GetString(5),
-                ParentSku = reader.IsDBNull(6) ? null : reader.GetString(6),
-                VariantCode = reader.IsDBNull(7) ? null : reader.GetString(7),
-                CreatedAt = createdAt,
-                VariantCount = variantCount > 0 ? variantCount : null
-            });
+            products.Add(MapProductListItem(reader));
         }
 
         return products;
+    }
+
+    private static ProductListItem MapProductListItem(SqliteDataReader reader)
+    {
+        var createdAtStr = reader.IsDBNull(8) ? null : reader.GetString(8);
+        DateTimeOffset? createdAt = null;
+        if (createdAtStr != null && DateTimeOffset.TryParse(createdAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            createdAt = parsed;
+        }
+
+        var variantCount = reader.IsDBNull(9) ? (int?)null : reader.GetInt32(9);
+
+        var priceUpdatedAtStr = reader.IsDBNull(15) ? null : reader.GetString(15);
+        DateTimeOffset? priceUpdatedAt = null;
+        if (priceUpdatedAtStr != null && DateTimeOffset.TryParse(priceUpdatedAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedPrice))
+        {
+            priceUpdatedAt = parsedPrice;
+        }
+
+        var stockUpdatedAtStr = reader.IsDBNull(16) ? null : reader.GetString(16);
+        DateTimeOffset? stockUpdatedAt = null;
+        if (stockUpdatedAtStr != null && DateTimeOffset.TryParse(stockUpdatedAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedStock))
+        {
+            stockUpdatedAt = parsedStock;
+        }
+
+        return new ProductListItem
+        {
+            JobId = Guid.Parse(reader.GetString(1)),
+            ProductId = reader.IsDBNull(2) ? null : reader.GetInt32(2),
+            Sku = reader.GetString(3),
+            Name = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+            VariantStatus = reader.GetString(5),
+            ParentSku = reader.IsDBNull(6) ? null : reader.GetString(6),
+            VariantCode = reader.IsDBNull(7) ? null : reader.GetString(7),
+            CreatedAt = createdAt,
+            VariantCount = variantCount > 0 ? variantCount : null,
+            LastPrice = reader.IsDBNull(10) ? null : reader.GetDecimal(10),
+            LastPriceEmployee = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+            LastPriceMember = reader.IsDBNull(12) ? null : reader.GetDecimal(12),
+            LastStock = reader.IsDBNull(13) ? null : reader.GetInt32(13),
+            LastWarehouseId = reader.IsDBNull(14) ? null : reader.GetInt32(14),
+            LastPriceUpdatedAt = priceUpdatedAt,
+            LastStockUpdatedAt = stockUpdatedAt
+        };
     }
 
     public async Task<IReadOnlyList<ProductListItem>> GetVariantsForMasterAsync(
@@ -488,7 +548,15 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                    p.VariantStatus,
                    p.ParentSku,
                    p.VariantCode,
-                   p.CreatedAt
+                   p.CreatedAt,
+                   0 AS VariantCount,
+                   p.LastPrice,
+                   p.LastPriceEmployee,
+                   p.LastPriceMember,
+                   p.LastStock,
+                   p.LastWarehouseId,
+                   p.LastPriceUpdatedAt,
+                   p.LastStockUpdatedAt
             FROM Products p
             WHERE p.ParentSku = @masterSku
             ORDER BY p.Sku;
@@ -498,25 +566,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var createdAtStr = reader.IsDBNull(8) ? null : reader.GetString(8);
-            DateTimeOffset? createdAt = null;
-            if (createdAtStr != null && DateTimeOffset.TryParse(createdAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-            {
-                createdAt = parsed;
-            }
-
-            products.Add(new ProductListItem
-            {
-                JobId = Guid.Parse(reader.GetString(1)),
-                ProductId = reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                Sku = reader.GetString(3),
-                Name = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
-                VariantStatus = reader.GetString(5),
-                ParentSku = reader.IsDBNull(6) ? null : reader.GetString(6),
-                VariantCode = reader.IsDBNull(7) ? null : reader.GetString(7),
-                CreatedAt = createdAt,
-                VariantCount = null
-            });
+            products.Add(MapProductListItem(reader));
         }
 
         return products;
@@ -553,6 +603,105 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         command.Parameters.AddWithValue("@parentSku", (object?)parentSku ?? DBNull.Value);
         command.Parameters.AddWithValue("@variantCode", (object?)variantCode ?? DBNull.Value);
         command.Parameters.AddWithValue("@createdAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateProductPriceAsync(
+        string sku,
+        decimal? price,
+        decimal? priceEmployee,
+        decimal? priceMember,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        if (string.IsNullOrWhiteSpace(sku))
+            return;
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE Products
+            SET LastPrice = @price,
+                LastPriceEmployee = @priceEmployee,
+                LastPriceMember = @priceMember,
+                LastPriceUpdatedAt = @updatedAt
+            WHERE Sku = @sku;
+            """;
+
+        command.Parameters.AddWithValue("@sku", sku);
+        command.Parameters.AddWithValue("@price", price.HasValue ? price.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@priceEmployee", priceEmployee.HasValue ? priceEmployee.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@priceMember", priceMember.HasValue ? priceMember.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@updatedAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateProductPriceByActindoIdAsync(
+        int actindoProductId,
+        decimal? price,
+        decimal? priceEmployee,
+        decimal? priceMember,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE Products
+            SET LastPrice = @price,
+                LastPriceEmployee = @priceEmployee,
+                LastPriceMember = @priceMember,
+                LastPriceUpdatedAt = @updatedAt
+            WHERE ActindoProductId = @actindoProductId;
+            """;
+
+        command.Parameters.AddWithValue("@actindoProductId", actindoProductId);
+        command.Parameters.AddWithValue("@price", price.HasValue ? price.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@priceEmployee", priceEmployee.HasValue ? priceEmployee.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@priceMember", priceMember.HasValue ? priceMember.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@updatedAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateProductStockAsync(
+        string sku,
+        int stock,
+        int warehouseId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        if (string.IsNullOrWhiteSpace(sku))
+            return;
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE Products
+            SET LastStock = @stock,
+                LastWarehouseId = @warehouseId,
+                LastStockUpdatedAt = @updatedAt
+            WHERE Sku = @sku;
+            """;
+
+        command.Parameters.AddWithValue("@sku", sku);
+        command.Parameters.AddWithValue("@stock", stock);
+        command.Parameters.AddWithValue("@warehouseId", warehouseId);
+        command.Parameters.AddWithValue("@updatedAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -889,6 +1038,15 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                     ON Products (ParentSku);
                 """;
             productsParentIndex.ExecuteNonQuery();
+
+            // Preis- und Bestandsfelder
+            EnsureColumn(connection, "Products", "LastPrice", "REAL NULL");
+            EnsureColumn(connection, "Products", "LastPriceEmployee", "REAL NULL");
+            EnsureColumn(connection, "Products", "LastPriceMember", "REAL NULL");
+            EnsureColumn(connection, "Products", "LastStock", "INTEGER NULL");
+            EnsureColumn(connection, "Products", "LastWarehouseId", "INTEGER NULL");
+            EnsureColumn(connection, "Products", "LastPriceUpdatedAt", "TEXT NULL");
+            EnsureColumn(connection, "Products", "LastStockUpdatedAt", "TEXT NULL");
 
             _initialized = true;
         }

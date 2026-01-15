@@ -137,6 +137,52 @@ public sealed class ActindoProductsController : ControllerBase
             ?? string.Empty;
     }
 
+    private static (int? actindoId, decimal? price, decimal? priceEmployee, decimal? priceMember) ExtractPriceData(JsonElement element)
+    {
+        int? actindoId = null;
+        decimal? price = null;
+        decimal? priceEmployee = null;
+        decimal? priceMember = null;
+
+        // Actindo ID extrahieren
+        if (element.TryGetProperty("id", out var idProp))
+        {
+            if (idProp.ValueKind == JsonValueKind.Number && idProp.TryGetInt32(out var id))
+                actindoId = id;
+            else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out var idStr))
+                actindoId = idStr;
+        }
+
+        // Basispreis extrahieren: _pim_price.currencies.EUR.base.price
+        price = ExtractPriceFromField(element, "_pim_price");
+        priceEmployee = ExtractPriceFromField(element, "_pim_price_employee");
+        priceMember = ExtractPriceFromField(element, "_pim_price_member");
+
+        return (actindoId, price, priceEmployee, priceMember);
+    }
+
+    private static decimal? ExtractPriceFromField(JsonElement element, string fieldName)
+    {
+        if (!element.TryGetProperty(fieldName, out var priceObj))
+            return null;
+
+        // Versuche: currencies.EUR.base.price
+        if (priceObj.TryGetProperty("currencies", out var currencies))
+        {
+            foreach (var currency in currencies.EnumerateObject())
+            {
+                if (currency.Value.TryGetProperty("base", out var baseProp) &&
+                    baseProp.TryGetProperty("price", out var priceProp))
+                {
+                    if (priceProp.TryGetDecimal(out var p))
+                        return p;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Aktualisiert ein bestehendes Produkt und seine Varianten in Actindo.
     /// </summary>
@@ -269,6 +315,16 @@ public sealed class ActindoProductsController : ControllerBase
 
             await Task.WhenAll(tasks);
 
+            // Speichere Bestandsdaten in DB
+            foreach (var item in workItems)
+            {
+                await _dashboardMetrics.UpdateProductStockAsync(
+                    item.sku,
+                    (int)(item.stock.Stock ?? 0),
+                    item.stock.WarehouseId ?? 0,
+                    cancellationToken);
+            }
+
             success = true;
             responsePayload = DashboardPayloadSerializer.Serialize(results);
             return Ok(new { results });
@@ -317,6 +373,8 @@ public sealed class ActindoProductsController : ControllerBase
             var endpoints = await _endpointProvider.GetAsync(cancellationToken);
             var results = new List<JsonElement>();
 
+            var priceUpdates = new List<(int actindoId, decimal? price, decimal? priceEmployee, decimal? priceMember)>();
+
             if (body.TryGetProperty("variant_prices", out var variantPrices) &&
                 variantPrices.ValueKind == JsonValueKind.Array &&
                 variantPrices.GetArrayLength() > 0)
@@ -329,6 +387,11 @@ public sealed class ActindoProductsController : ControllerBase
                         forwarded,
                         cancellationToken);
                     results.Add(resp);
+
+                    // Extrahiere Preisdaten für DB-Update
+                    var priceData = ExtractPriceData(variant);
+                    if (priceData.actindoId.HasValue)
+                        priceUpdates.Add((priceData.actindoId.Value, priceData.price, priceData.priceEmployee, priceData.priceMember));
                 }
             }
             else
@@ -339,6 +402,22 @@ public sealed class ActindoProductsController : ControllerBase
                     forwarded,
                     cancellationToken);
                 results.Add(resp);
+
+                // Extrahiere Preisdaten für DB-Update
+                var priceData = ExtractPriceData(body);
+                if (priceData.actindoId.HasValue)
+                    priceUpdates.Add((priceData.actindoId.Value, priceData.price, priceData.priceEmployee, priceData.priceMember));
+            }
+
+            // Speichere Preisdaten in DB
+            foreach (var update in priceUpdates)
+            {
+                await _dashboardMetrics.UpdateProductPriceByActindoIdAsync(
+                    update.actindoId,
+                    update.price,
+                    update.priceEmployee,
+                    update.priceMember,
+                    cancellationToken);
             }
 
             success = true;

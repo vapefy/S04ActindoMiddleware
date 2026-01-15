@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { RefreshCw, Search, Package, ChevronDown, ChevronRight } from 'lucide-svelte';
+	import { RefreshCw, Search, Package, ChevronDown, ChevronRight, Euro, BoxIcon } from 'lucide-svelte';
 	import { products as productsApi } from '$api/client';
 	import type { ProductListItem } from '$api/types';
 	import { formatDate } from '$utils/format';
@@ -11,6 +11,11 @@
 	import Badge from '$components/ui/Badge.svelte';
 	import Alert from '$components/ui/Alert.svelte';
 	import Spinner from '$components/ui/Spinner.svelte';
+
+	function formatPrice(price: number | null): string {
+		if (price === null) return '-';
+		return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(price);
+	}
 
 	let products: ProductListItem[] = $state([]);
 	let loading = $state(true);
@@ -151,6 +156,16 @@
 							Actindo ID
 						</th>
 						<th
+							class="text-right py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium"
+						>
+							Preis
+						</th>
+						<th
+							class="text-right py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium"
+						>
+							Bestand
+						</th>
+						<th
 							class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium"
 						>
 							Erstellt
@@ -224,6 +239,32 @@
 								{/if}
 							</td>
 
+							<!-- Preis -->
+							<td class="py-3 px-4 text-right">
+								{#if product.lastPrice !== null}
+									<span class="font-mono text-sm text-green-400">{formatPrice(product.lastPrice)}</span>
+									{#if product.lastPriceEmployee || product.lastPriceMember}
+										<div class="text-xs text-gray-500 mt-0.5">
+											{#if product.lastPriceEmployee}MA: {formatPrice(product.lastPriceEmployee)}{/if}
+											{#if product.lastPriceMember}{product.lastPriceEmployee ? ' / ' : ''}Mit: {formatPrice(product.lastPriceMember)}{/if}
+										</div>
+									{/if}
+								{:else}
+									<span class="text-gray-500">-</span>
+								{/if}
+							</td>
+
+							<!-- Bestand -->
+							<td class="py-3 px-4 text-right">
+								{#if product.lastStock !== null}
+									<span class="font-mono text-sm {product.lastStock > 0 ? 'text-blue-400' : 'text-red-400'}">
+										{product.lastStock}
+									</span>
+								{:else}
+									<span class="text-gray-500">-</span>
+								{/if}
+							</td>
+
 							<!-- Erstellt -->
 							<td class="py-3 px-4 text-sm text-gray-400">
 								{formatDate(product.createdAt)}
@@ -256,6 +297,22 @@
 									<td class="py-2 px-4">
 										{#if variant.productId}
 											<span class="font-mono text-sm">{variant.productId}</span>
+										{:else}
+											<span class="text-gray-500">-</span>
+										{/if}
+									</td>
+									<td class="py-2 px-4 text-right">
+										{#if variant.lastPrice !== null}
+											<span class="font-mono text-sm text-green-400">{formatPrice(variant.lastPrice)}</span>
+										{:else}
+											<span class="text-gray-500">-</span>
+										{/if}
+									</td>
+									<td class="py-2 px-4 text-right">
+										{#if variant.lastStock !== null}
+											<span class="font-mono text-sm {variant.lastStock > 0 ? 'text-blue-400' : 'text-red-400'}">
+												{variant.lastStock}
+											</span>
 										{:else}
 											<span class="text-gray-500">-</span>
 										{/if}
