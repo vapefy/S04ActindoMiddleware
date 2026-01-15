@@ -166,16 +166,33 @@ public sealed class ActindoProductsController : ControllerBase
         if (!element.TryGetProperty(fieldName, out var priceObj))
             return null;
 
-        // Versuche: currencies.EUR.base.price
+        // Versuche: currencies.EUR.base.price (currencies kann Object oder Array sein)
         if (priceObj.TryGetProperty("currencies", out var currencies))
         {
-            foreach (var currency in currencies.EnumerateObject())
+            if (currencies.ValueKind == JsonValueKind.Object)
             {
-                if (currency.Value.TryGetProperty("base", out var baseProp) &&
-                    baseProp.TryGetProperty("price", out var priceProp))
+                // Object: { "EUR": { "base": { "price": 19.99 } } }
+                foreach (var currency in currencies.EnumerateObject())
                 {
-                    if (priceProp.TryGetDecimal(out var p))
-                        return p;
+                    if (currency.Value.TryGetProperty("base", out var baseProp) &&
+                        baseProp.TryGetProperty("price", out var priceProp))
+                    {
+                        if (priceProp.TryGetDecimal(out var p))
+                            return p;
+                    }
+                }
+            }
+            else if (currencies.ValueKind == JsonValueKind.Array)
+            {
+                // Array: [{ "base": { "price": 19.99 } }]
+                foreach (var currency in currencies.EnumerateArray())
+                {
+                    if (currency.TryGetProperty("base", out var baseProp) &&
+                        baseProp.TryGetProperty("price", out var priceProp))
+                    {
+                        if (priceProp.TryGetDecimal(out var p))
+                            return p;
+                    }
                 }
             }
         }
