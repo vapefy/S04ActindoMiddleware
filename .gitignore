@@ -21,6 +21,7 @@ node_modules/
 # Secrets / local config
 .actindo-refresh-token
 appsettings.Development.json
+CLAUDE.md
 
 # Misc
 Thumbs.db
