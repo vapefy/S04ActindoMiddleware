@@ -1,0 +1,482 @@
+{
+  ".svelte-kit/generated/server/internal.js": {
+    "file": "internal.js",
+    "name": "internal",
+    "src": ".svelte-kit/generated/server/internal.js",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_environment.js"
+    ]
+  },
+  "_Alert.js": {
+    "file": "chunks/Alert.js",
+    "name": "Alert",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_Badge.js": {
+    "file": "chunks/Badge.js",
+    "name": "Badge",
+    "imports": [
+      "_index2.js"
+    ]
+  },
+  "_Button.js": {
+    "file": "chunks/Button.js",
+    "name": "Button",
+    "imports": [
+      "_index2.js"
+    ]
+  },
+  "_Card.js": {
+    "file": "chunks/Card.js",
+    "name": "Card",
+    "imports": [
+      "_index2.js"
+    ]
+  },
+  "_Input.js": {
+    "file": "chunks/Input.js",
+    "name": "Input",
+    "imports": [
+      "_index2.js"
+    ]
+  },
+  "_PageHeader.js": {
+    "file": "chunks/PageHeader.js",
+    "name": "PageHeader",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js",
+      "_context.js"
+    ]
+  },
+  "_Spinner.js": {
+    "file": "chunks/Spinner.js",
+    "name": "Spinner",
+    "imports": [
+      "_index2.js",
+      "_context.js"
+    ]
+  },
+  "_activity.js": {
+    "file": "chunks/activity.js",
+    "name": "activity",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_arrow-right-left.js": {
+    "file": "chunks/arrow-right-left.js",
+    "name": "arrow-right-left",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_auth.js": {
+    "file": "chunks/auth.js",
+    "name": "auth",
+    "imports": [
+      "_index.js",
+      "_client2.js"
+    ]
+  },
+  "_chevron-right.js": {
+    "file": "chunks/chevron-right.js",
+    "name": "chevron-right",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_circle-user.js": {
+    "file": "chunks/circle-user.js",
+    "name": "circle-user",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_client.js": {
+    "file": "chunks/client.js",
+    "name": "client",
+    "imports": [
+      "_exports.js",
+      "_utils.js",
+      "_index.js",
+      "_state.svelte.js"
+    ]
+  },
+  "_client2.js": {
+    "file": "chunks/client2.js",
+    "name": "client"
+  },
+  "_context.js": {
+    "file": "chunks/context.js",
+    "name": "context",
+    "imports": [
+      "_false.js"
+    ]
+  },
+  "_dashboard.js": {
+    "file": "chunks/dashboard.js",
+    "name": "dashboard",
+    "imports": [
+      "_index.js",
+      "_client2.js"
+    ]
+  },
+  "_environment.js": {
+    "file": "chunks/environment.js",
+    "name": "environment"
+  },
+  "_exports.js": {
+    "file": "chunks/exports.js",
+    "name": "exports"
+  },
+  "_false.js": {
+    "file": "chunks/false.js",
+    "name": "false"
+  },
+  "_format.js": {
+    "file": "chunks/format.js",
+    "name": "format"
+  },
+  "_index.js": {
+    "file": "chunks/index.js",
+    "name": "index",
+    "imports": [
+      "_context.js"
+    ]
+  },
+  "_index2.js": {
+    "file": "chunks/index2.js",
+    "name": "index",
+    "imports": [
+      "_context.js"
+    ]
+  },
+  "_internal.js": {
+    "file": "chunks/internal.js",
+    "name": "internal",
+    "imports": [
+      "_context.js",
+      "_index2.js",
+      "_environment.js"
+    ]
+  },
+  "_package.js": {
+    "file": "chunks/package.js",
+    "name": "package",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_search.js": {
+    "file": "chunks/search.js",
+    "name": "search",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_settings.js": {
+    "file": "chunks/settings.js",
+    "name": "settings",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_shared.js": {
+    "file": "chunks/shared.js",
+    "name": "shared",
+    "imports": [
+      "_utils.js"
+    ]
+  },
+  "_state.svelte.js": {
+    "file": "chunks/state.svelte.js",
+    "name": "state.svelte",
+    "imports": [
+      "_context.js"
+    ]
+  },
+  "_trash-2.js": {
+    "file": "chunks/trash-2.js",
+    "name": "trash-2",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_users.js": {
+    "file": "chunks/users.js",
+    "name": "users",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js"
+    ]
+  },
+  "_utils.js": {
+    "file": "chunks/utils.js",
+    "name": "utils"
+  },
+  "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
+    "file": "remote-entry.js",
+    "name": "remote-entry",
+    "src": "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js",
+    "isEntry": true,
+    "imports": [
+      "_shared.js",
+      "_false.js",
+      "_environment.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte": {
+    "file": "entries/fallbacks/error.svelte.js",
+    "name": "entries/fallbacks/error.svelte",
+    "src": "node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
+    "isEntry": true,
+    "imports": [
+      "_context.js",
+      "_state.svelte.js",
+      "_client.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/server/index.js": {
+    "file": "index.js",
+    "name": "index",
+    "src": "node_modules/@sveltejs/kit/src/runtime/server/index.js",
+    "isEntry": true,
+    "imports": [
+      "_false.js",
+      "_environment.js",
+      "_shared.js",
+      "_exports.js",
+      "_utils.js",
+      "_index.js",
+      "_internal.js"
+    ]
+  },
+  "src/routes/+layout.svelte": {
+    "file": "entries/pages/_layout.svelte.js",
+    "name": "entries/pages/_layout.svelte",
+    "src": "src/routes/+layout.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_context.js",
+      "_exports.js",
+      "_utils.js",
+      "_state.svelte.js",
+      "_auth.js",
+      "_dashboard.js",
+      "_Button.js",
+      "_Spinner.js",
+      "_package.js",
+      "_users.js",
+      "_activity.js",
+      "_arrow-right-left.js",
+      "_circle-user.js",
+      "_settings.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_layout.8JpLpujX.css"
+    ]
+  },
+  "src/routes/+page.svelte": {
+    "file": "entries/pages/_page.svelte.js",
+    "name": "entries/pages/_page.svelte",
+    "src": "src/routes/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_dashboard.js",
+      "_context.js",
+      "_Card.js",
+      "_format.js",
+      "_Alert.js",
+      "_Spinner.js"
+    ]
+  },
+  "src/routes/customers/+page.svelte": {
+    "file": "entries/pages/customers/_page.svelte.js",
+    "name": "entries/pages/customers/_page.svelte",
+    "src": "src/routes/customers/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client2.js",
+      "_format.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Input.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_search.js",
+      "_users.js",
+      "_context.js"
+    ]
+  },
+  "src/routes/jobs/+page.svelte": {
+    "file": "entries/pages/jobs/_page.svelte.js",
+    "name": "entries/pages/jobs/_page.svelte",
+    "src": "src/routes/jobs/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_dashboard.js",
+      "_auth.js",
+      "_format.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Input.js",
+      "_Badge.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_context.js",
+      "_search.js",
+      "_activity.js",
+      "_chevron-right.js",
+      "_trash-2.js"
+    ]
+  },
+  "src/routes/login/+page.svelte": {
+    "file": "entries/pages/login/_page.svelte.js",
+    "name": "entries/pages/login/_page.svelte",
+    "src": "src/routes/login/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_exports.js",
+      "_utils.js",
+      "_context.js",
+      "_state.svelte.js",
+      "_auth.js",
+      "_Button.js",
+      "_Input.js",
+      "_Card.js"
+    ]
+  },
+  "src/routes/products/+page.svelte": {
+    "file": "entries/pages/products/_page.svelte.js",
+    "name": "entries/pages/products/_page.svelte",
+    "src": "src/routes/products/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client2.js",
+      "_format.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Input.js",
+      "_Badge.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_search.js",
+      "_package.js",
+      "_chevron-right.js",
+      "_context.js"
+    ]
+  },
+  "src/routes/register/+page.svelte": {
+    "file": "entries/pages/register/_page.svelte.js",
+    "name": "entries/pages/register/_page.svelte",
+    "src": "src/routes/register/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_exports.js",
+      "_utils.js",
+      "_context.js",
+      "_state.svelte.js",
+      "_Button.js",
+      "_Input.js",
+      "_Card.js"
+    ]
+  },
+  "src/routes/settings/+page.svelte": {
+    "file": "entries/pages/settings/_page.svelte.js",
+    "name": "entries/pages/settings/_page.svelte",
+    "src": "src/routes/settings/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_exports.js",
+      "_utils.js",
+      "_state.svelte.js",
+      "_client2.js",
+      "_auth.js",
+      "_format.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Input.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_Badge.js",
+      "_settings.js",
+      "_trash-2.js",
+      "_context.js"
+    ]
+  },
+  "src/routes/sync/+page.svelte": {
+    "file": "entries/pages/sync/_page.svelte.js",
+    "name": "entries/pages/sync/_page.svelte",
+    "src": "src/routes/sync/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client.js",
+      "_index.js",
+      "_client2.js",
+      "_auth.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_Badge.js",
+      "_settings.js",
+      "_package.js",
+      "_users.js",
+      "_arrow-right-left.js",
+      "_context.js"
+    ]
+  },
+  "src/routes/users/+page.svelte": {
+    "file": "entries/pages/users/_page.svelte.js",
+    "name": "entries/pages/users/_page.svelte",
+    "src": "src/routes/users/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_exports.js",
+      "_utils.js",
+      "_context.js",
+      "_state.svelte.js",
+      "_client2.js",
+      "_auth.js",
+      "_format.js",
+      "_PageHeader.js",
+      "_Card.js",
+      "_Button.js",
+      "_Input.js",
+      "_Badge.js",
+      "_Alert.js",
+      "_Spinner.js",
+      "_circle-user.js",
+      "_trash-2.js"
+    ]
+  }
+}

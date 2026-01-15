@@ -1,0 +1,184 @@
+// Auth Types
+export interface User {
+	authenticated: boolean;
+	username: string;
+	role: 'read' | 'write' | 'admin';
+}
+
+export interface LoginRequest {
+	username: string;
+	password: string;
+}
+
+export interface RegisterRequest {
+	username: string;
+	password: string;
+}
+
+export interface BootstrapRequest {
+	username: string;
+	password: string;
+}
+
+// Dashboard Types
+export interface MetricStats {
+	title: string;
+	success: number;
+	failed: number;
+	averageDurationSeconds: number;
+}
+
+export interface OAuthStatus {
+	state: 'ok' | 'warning' | 'error' | 'unknown';
+	message: string;
+	expiresAt: string | null;
+	hasRefreshToken: boolean;
+}
+
+export interface ActindoStatus {
+	state: 'ok' | 'warning' | 'error' | 'unknown';
+	message: string;
+	lastSuccessAt: string | null;
+	lastFailureAt: string | null;
+}
+
+export interface DashboardSummary {
+	generatedAt: string;
+	activeJobs: number;
+	products: MetricStats;
+	customers: MetricStats;
+	transactions: MetricStats;
+	media: MetricStats;
+	oauth: OAuthStatus;
+	actindo: ActindoStatus;
+}
+
+// Job Types
+export interface ActindoLog {
+	endpoint: string;
+	requestPayload: string;
+	responsePayload: string | null;
+	success: boolean;
+	createdAt: string;
+}
+
+export interface Job {
+	id: string;
+	type: 'Product' | 'Customer' | 'Transaction' | 'Media';
+	endpoint: string;
+	success: boolean;
+	durationMilliseconds: number;
+	startedAt: string;
+	completedAt: string | null;
+	requestPayload: string;
+	responsePayload: string | null;
+	errorPayload: string | null;
+	actindoLogs: ActindoLog[];
+}
+
+export interface JobsResponse {
+	jobs: Job[];
+	total: number;
+}
+
+// Product Types
+export type VariantStatus = 'single' | 'master' | 'child';
+
+export interface ProductListItem {
+	jobId: string;
+	productId: number | null;
+	sku: string;
+	name: string;
+	variantCount: number | null;
+	createdAt: string | null;
+	variantStatus: VariantStatus;
+	parentSku: string | null;
+	variantCode: string | null;
+}
+
+// Customer Types
+export interface CustomerListItem {
+	jobId: string;
+	customerId: number | null;
+	debtorNumber: string;
+	name: string;
+	createdAt: string | null;
+}
+
+// User Management Types
+export interface UserDto {
+	id: string;
+	username: string;
+	role: string;
+	createdAt: string;
+}
+
+export interface CreateUserRequest {
+	username: string;
+	password: string;
+	role: 'read' | 'write' | 'admin';
+}
+
+export interface SetRoleRequest {
+	role: 'read' | 'write' | 'admin';
+}
+
+// Registration Types
+export interface Registration {
+	id: string;
+	username: string;
+	createdAt: string;
+}
+
+export interface ApproveRegistrationRequest {
+	role: 'read' | 'write' | 'admin';
+}
+
+// Settings Types
+export interface ActindoSettings {
+	accessToken: string | null;
+	accessTokenExpiresAt: string | null;
+	refreshToken: string | null;
+	tokenEndpoint: string | null;
+	clientId: string | null;
+	clientSecret: string | null;
+	endpoints: Record<string, string>;
+	navApiUrl: string | null;
+	navApiToken: string | null;
+}
+
+// Sync Types
+export interface ProductSyncItem {
+	sku: string;
+	name: string;
+	middlewareActindoId: number | null;
+	navNavId: number | null;
+	navActindoId: number | null;
+	needsSync: boolean;
+	variantStatus: VariantStatus;
+}
+
+export interface CustomerSyncItem {
+	debtorNumber: string;
+	name: string;
+	middlewareActindoId: number | null;
+	navNavId: number | null;
+	navActindoId: number | null;
+	needsSync: boolean;
+}
+
+export interface ProductSyncStatus {
+	totalInMiddleware: number;
+	totalInNav: number;
+	synced: number;
+	needsSync: number;
+	items: ProductSyncItem[];
+}
+
+export interface CustomerSyncStatus {
+	totalInMiddleware: number;
+	totalInNav: number;
+	synced: number;
+	needsSync: number;
+	items: CustomerSyncItem[];
+}
