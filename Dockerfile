@@ -9,8 +9,9 @@ FROM node:22-alpine AS frontend-build
 WORKDIR /frontend
 
 # Install dependencies first (better caching)
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --silent
+COPY frontend/package.json ./
+COPY frontend/package-lock.json* ./
+RUN npm install
 
 # Build frontend
 COPY frontend/ ./
