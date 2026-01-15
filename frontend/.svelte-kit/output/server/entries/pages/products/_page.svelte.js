@@ -48,12 +48,18 @@ function Chevron_down($$renderer, $$props) {
 }
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
+    function formatPrice(price) {
+      if (price === null) return "-";
+      return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(price);
+    }
     let products$1 = [];
     let loading = true;
     let error = "";
     let search = "";
     let expandedProducts = {};
     let loadingVariants = {};
+    let stockModalStocks = [];
+    stockModalStocks.reduce((sum, s) => sum + s.stock, 0);
     let filteredProducts = search.trim() ? products$1.filter((p) => p.sku.toLowerCase().includes(search.toLowerCase()) || p.name.toLowerCase().includes(search.toLowerCase()) || p.variantCode && p.variantCode.toLowerCase().includes(search.toLowerCase())) : products$1;
     async function loadProducts() {
       loading = true;
@@ -152,7 +158,7 @@ function _page($$renderer, $$props) {
               $$renderer4.push(`<!----> <p>${escape_html(search ? "Keine Produkte gefunden" : "Noch keine Produkte vorhanden")}</p></div>`);
             } else {
               $$renderer4.push("<!--[!-->");
-              $$renderer4.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10"><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium w-10"></th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">SKU</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Name</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Status</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Actindo ID</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Erstellt</th></tr></thead><tbody><!--[-->`);
+              $$renderer4.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10"><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium w-10"></th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">SKU</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Name</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Status</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Actindo ID</th><th class="text-right py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Preis</th><th class="text-right py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Bestand</th><th class="text-left py-3 px-4 text-xs uppercase tracking-wider text-gray-400 font-medium">Erstellt</th></tr></thead><tbody><!--[-->`);
               const each_array = ensure_array_like(filteredProducts);
               for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
                 let product = each_array[$$index_1];
@@ -211,6 +217,43 @@ function _page($$renderer, $$props) {
                   $$renderer4.push("<!--[!-->");
                   $$renderer4.push(`<span class="text-gray-500">-</span>`);
                 }
+                $$renderer4.push(`<!--]--></td><td class="py-3 px-4 text-right">`);
+                if (product.lastPrice !== null) {
+                  $$renderer4.push("<!--[-->");
+                  $$renderer4.push(`<span class="font-mono text-sm text-green-400">${escape_html(formatPrice(product.lastPrice))}</span> `);
+                  if (product.lastPriceEmployee || product.lastPriceMember) {
+                    $$renderer4.push("<!--[-->");
+                    $$renderer4.push(`<div class="text-xs text-gray-500 mt-0.5">`);
+                    if (product.lastPriceEmployee) {
+                      $$renderer4.push("<!--[-->");
+                      $$renderer4.push(`MA: ${escape_html(formatPrice(product.lastPriceEmployee))}`);
+                    } else {
+                      $$renderer4.push("<!--[!-->");
+                    }
+                    $$renderer4.push(`<!--]--> `);
+                    if (product.lastPriceMember) {
+                      $$renderer4.push("<!--[-->");
+                      $$renderer4.push(`${escape_html(product.lastPriceEmployee ? " / " : "")}Mit: ${escape_html(formatPrice(product.lastPriceMember))}`);
+                    } else {
+                      $$renderer4.push("<!--[!-->");
+                    }
+                    $$renderer4.push(`<!--]--></div>`);
+                  } else {
+                    $$renderer4.push("<!--[!-->");
+                  }
+                  $$renderer4.push(`<!--]-->`);
+                } else {
+                  $$renderer4.push("<!--[!-->");
+                  $$renderer4.push(`<span class="text-gray-500">-</span>`);
+                }
+                $$renderer4.push(`<!--]--></td><td class="py-3 px-4 text-right">`);
+                if (product.lastStock !== null) {
+                  $$renderer4.push("<!--[-->");
+                  $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(product.lastStock > 0 ? "text-blue-400" : "text-red-400")} hover:underline cursor-pointer`)}>${escape_html(product.lastStock)}</button>`);
+                } else {
+                  $$renderer4.push("<!--[!-->");
+                  $$renderer4.push(`<span class="text-gray-500">-</span>`);
+                }
                 $$renderer4.push(`<!--]--></td><td class="py-3 px-4 text-sm text-gray-400">${escape_html(formatDate(product.createdAt))}</td></tr> `);
                 if (isExpanded && expandedProducts[product.sku]) {
                   $$renderer4.push("<!--[-->");
@@ -247,6 +290,22 @@ function _page($$renderer, $$props) {
                       $$renderer4.push("<!--[!-->");
                       $$renderer4.push(`<span class="text-gray-500">-</span>`);
                     }
+                    $$renderer4.push(`<!--]--></td><td class="py-2 px-4 text-right">`);
+                    if (variant.lastPrice !== null) {
+                      $$renderer4.push("<!--[-->");
+                      $$renderer4.push(`<span class="font-mono text-sm text-green-400">${escape_html(formatPrice(variant.lastPrice))}</span>`);
+                    } else {
+                      $$renderer4.push("<!--[!-->");
+                      $$renderer4.push(`<span class="text-gray-500">-</span>`);
+                    }
+                    $$renderer4.push(`<!--]--></td><td class="py-2 px-4 text-right">`);
+                    if (variant.lastStock !== null) {
+                      $$renderer4.push("<!--[-->");
+                      $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(variant.lastStock > 0 ? "text-blue-400" : "text-red-400")} hover:underline cursor-pointer`)}>${escape_html(variant.lastStock)}</button>`);
+                    } else {
+                      $$renderer4.push("<!--[!-->");
+                      $$renderer4.push(`<span class="text-gray-500">-</span>`);
+                    }
                     $$renderer4.push(`<!--]--></td><td class="py-2 px-4 text-sm text-gray-400">${escape_html(formatDate(variant.createdAt))}</td></tr>`);
                   }
                   $$renderer4.push(`<!--]-->`);
@@ -262,7 +321,11 @@ function _page($$renderer, $$props) {
           $$renderer4.push(`<!--]-->`);
         }
       });
-      $$renderer3.push(`<!---->`);
+      $$renderer3.push(`<!----> `);
+      {
+        $$renderer3.push("<!--[!-->");
+      }
+      $$renderer3.push(`<!--]-->`);
     }
     do {
       $$settled = true;

@@ -7,6 +7,7 @@ import type {
 	JobsResponse,
 	Job,
 	ProductListItem,
+	ProductStockItem,
 	CustomerListItem,
 	UserDto,
 	CreateUserRequest,
@@ -155,6 +156,9 @@ export const products = {
 
 	getVariants: (masterSku: string) =>
 		request<ProductListItem[]>(`/api/products/${encodeURIComponent(masterSku)}/variants`),
+
+	getStocks: (sku: string) =>
+		request<ProductStockItem[]>(`/api/products/${encodeURIComponent(sku)}/stocks`),
 
 	delete: (data: { productId: number; jobId: string; sku: string }) =>
 		request<void>('/api/products/delete', {

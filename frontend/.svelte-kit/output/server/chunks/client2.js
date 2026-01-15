@@ -90,6 +90,7 @@ const products = {
     return request(`/api/products/sync?${searchParams}`);
   },
   getVariants: (masterSku) => request(`/api/products/${encodeURIComponent(masterSku)}/variants`),
+  getStocks: (sku) => request(`/api/products/${encodeURIComponent(sku)}/stocks`),
   delete: (data) => request("/api/products/delete", {
     method: "POST",
     body: JSON.stringify(data)

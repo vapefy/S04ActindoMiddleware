@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { RefreshCw, Search, Package, ChevronDown, ChevronRight, Euro, BoxIcon } from 'lucide-svelte';
+	import { RefreshCw, Search, Package, ChevronDown, ChevronRight, X, Warehouse } from 'lucide-svelte';
 	import { products as productsApi } from '$api/client';
-	import type { ProductListItem } from '$api/types';
+	import type { ProductListItem, ProductStockItem } from '$api/types';
 	import { formatDate } from '$utils/format';
 	import PageHeader from '$components/layout/PageHeader.svelte';
 	import Card from '$components/ui/Card.svelte';
@@ -25,6 +25,33 @@
 	// Expanded master products (SKU -> variants)
 	let expandedProducts: Record<string, ProductListItem[]> = $state({});
 	let loadingVariants: Record<string, boolean> = $state({});
+
+	// Stock modal state
+	let stockModalOpen = $state(false);
+	let stockModalSku = $state('');
+	let stockModalLoading = $state(false);
+	let stockModalStocks: ProductStockItem[] = $state([]);
+	let stockModalTotal = $derived(stockModalStocks.reduce((sum, s) => sum + s.stock, 0));
+
+	async function openStockModal(sku: string) {
+		stockModalSku = sku;
+		stockModalOpen = true;
+		stockModalLoading = true;
+		stockModalStocks = [];
+		try {
+			stockModalStocks = await productsApi.getStocks(sku);
+		} catch (err) {
+			console.error('Failed to load stocks:', err);
+		} finally {
+			stockModalLoading = false;
+		}
+	}
+
+	function closeStockModal() {
+		stockModalOpen = false;
+		stockModalSku = '';
+		stockModalStocks = [];
+	}
 
 	let filteredProducts = $derived(
 		search.trim()
@@ -257,9 +284,13 @@
 							<!-- Bestand -->
 							<td class="py-3 px-4 text-right">
 								{#if product.lastStock !== null}
-									<span class="font-mono text-sm {product.lastStock > 0 ? 'text-blue-400' : 'text-red-400'}">
+									<button
+										type="button"
+										onclick={() => openStockModal(product.sku)}
+										class="font-mono text-sm {product.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} hover:underline cursor-pointer"
+									>
 										{product.lastStock}
-									</span>
+									</button>
 								{:else}
 									<span class="text-gray-500">-</span>
 								{/if}
@@ -310,9 +341,13 @@
 									</td>
 									<td class="py-2 px-4 text-right">
 										{#if variant.lastStock !== null}
-											<span class="font-mono text-sm {variant.lastStock > 0 ? 'text-blue-400' : 'text-red-400'}">
+											<button
+												type="button"
+												onclick={() => openStockModal(variant.sku)}
+												class="font-mono text-sm {variant.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} hover:underline cursor-pointer"
+											>
 												{variant.lastStock}
-											</span>
+											</button>
 										{:else}
 											<span class="text-gray-500">-</span>
 										{/if}
@@ -333,3 +368,94 @@
 		</div>
 	{/if}
 </Card>
+
+<!-- Stock Modal -->
+{#if stockModalOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+		onclick={closeStockModal}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="bg-gray-800 rounded-xl border border-white/10 shadow-2xl w-full max-w-md mx-4"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Header -->
+			<div class="flex items-center justify-between p-4 border-b border-white/10">
+				<div class="flex items-center gap-3">
+					<Warehouse size={20} class="text-blue-400" />
+					<div>
+						<h3 class="font-semibold">Lagerbestände</h3>
+						<p class="text-sm text-gray-400 font-mono">{stockModalSku}</p>
+					</div>
+				</div>
+				<button
+					type="button"
+					onclick={closeStockModal}
+					class="p-1 rounded hover:bg-white/10 transition-colors"
+				>
+					<X size={20} class="text-gray-400" />
+				</button>
+			</div>
+
+			<!-- Content -->
+			<div class="p-4">
+				{#if stockModalLoading}
+					<div class="flex justify-center py-8">
+						<Spinner />
+					</div>
+				{:else if stockModalStocks.length === 0}
+					<div class="text-center py-8 text-gray-400">
+						<Warehouse size={32} class="mx-auto mb-2 opacity-50" />
+						<p>Keine Lagerbestände vorhanden</p>
+					</div>
+				{:else}
+					<table class="w-full">
+						<thead>
+							<tr class="border-b border-white/10">
+								<th class="text-left py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+									Lager ID
+								</th>
+								<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+									Bestand
+								</th>
+								<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+									Aktualisiert
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each stockModalStocks as stock}
+								<tr class="border-b border-white/5">
+									<td class="py-2">
+										<span class="font-mono text-sm">{stock.warehouseId}</span>
+									</td>
+									<td class="py-2 text-right">
+										<span class="font-mono text-sm {stock.stock > 0 ? 'text-blue-400' : 'text-red-400'}">
+											{stock.stock}
+										</span>
+									</td>
+									<td class="py-2 text-right text-sm text-gray-400">
+										{formatDate(stock.updatedAt)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr class="border-t border-white/10">
+								<td class="py-2 font-semibold">Gesamt</td>
+								<td class="py-2 text-right">
+									<span class="font-mono text-sm font-semibold {stockModalTotal > 0 ? 'text-blue-400' : 'text-red-400'}">
+										{stockModalTotal}
+									</span>
+								</td>
+								<td></td>
+							</tr>
+						</tfoot>
+					</table>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}

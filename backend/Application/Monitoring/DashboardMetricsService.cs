@@ -79,6 +79,10 @@ public interface IDashboardMetricsService
         int warehouseId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ProductStockItem>> GetProductStocksAsync(
+        string sku,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<CustomerListItem>> GetCreatedCustomersAsync(
         int limit,
         CancellationToken cancellationToken = default);
@@ -685,25 +689,93 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         if (string.IsNullOrWhiteSpace(sku))
             return;
 
+        var updatedAt = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        // Update Products table (last stock)
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                """
+                UPDATE Products
+                SET LastStock = @stock,
+                    LastWarehouseId = @warehouseId,
+                    LastStockUpdatedAt = @updatedAt
+                WHERE Sku = @sku;
+                """;
+
+            command.Parameters.AddWithValue("@sku", sku);
+            command.Parameters.AddWithValue("@stock", stock);
+            command.Parameters.AddWithValue("@warehouseId", warehouseId);
+            command.Parameters.AddWithValue("@updatedAt", updatedAt);
+
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // Upsert into ProductStocks table (per warehouse)
+        await using (var upsertCommand = connection.CreateCommand())
+        {
+            upsertCommand.CommandText =
+                """
+                INSERT INTO ProductStocks (Sku, WarehouseId, Stock, UpdatedAt)
+                VALUES (@sku, @warehouseId, @stock, @updatedAt)
+                ON CONFLICT(Sku, WarehouseId) DO UPDATE SET
+                    Stock = excluded.Stock,
+                    UpdatedAt = excluded.UpdatedAt;
+                """;
+
+            upsertCommand.Parameters.AddWithValue("@sku", sku);
+            upsertCommand.Parameters.AddWithValue("@warehouseId", warehouseId);
+            upsertCommand.Parameters.AddWithValue("@stock", stock);
+            upsertCommand.Parameters.AddWithValue("@updatedAt", updatedAt);
+
+            await upsertCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyList<ProductStockItem>> GetProductStocksAsync(
+        string sku,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        if (string.IsNullOrWhiteSpace(sku))
+            return Array.Empty<ProductStockItem>();
+
+        var stocks = new List<ProductStockItem>();
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            UPDATE Products
-            SET LastStock = @stock,
-                LastWarehouseId = @warehouseId,
-                LastStockUpdatedAt = @updatedAt
-            WHERE Sku = @sku;
+            SELECT Sku, WarehouseId, Stock, UpdatedAt
+            FROM ProductStocks
+            WHERE Sku = @sku
+            ORDER BY WarehouseId;
             """;
-
         command.Parameters.AddWithValue("@sku", sku);
-        command.Parameters.AddWithValue("@stock", stock);
-        command.Parameters.AddWithValue("@warehouseId", warehouseId);
-        command.Parameters.AddWithValue("@updatedAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var updatedAtStr = reader.GetString(3);
+            var updatedAt = DateTimeOffset.TryParse(updatedAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+                ? parsed
+                : DateTimeOffset.UtcNow;
+
+            stocks.Add(new ProductStockItem
+            {
+                Sku = reader.GetString(0),
+                WarehouseId = reader.GetInt32(1),
+                Stock = reader.GetInt32(2),
+                UpdatedAt = updatedAt
+            });
+        }
+
+        return stocks;
     }
 
     public async Task<IReadOnlyList<CustomerListItem>> GetCreatedCustomersAsync(
@@ -1047,6 +1119,29 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
             EnsureColumn(connection, "Products", "LastWarehouseId", "INTEGER NULL");
             EnsureColumn(connection, "Products", "LastPriceUpdatedAt", "TEXT NULL");
             EnsureColumn(connection, "Products", "LastStockUpdatedAt", "TEXT NULL");
+
+            // ProductStocks Tabelle für Lagerbestände pro Lager
+            using var stocksCommand = connection.CreateCommand();
+            stocksCommand.CommandText =
+                """
+                CREATE TABLE IF NOT EXISTS ProductStocks
+                (
+                    Sku TEXT NOT NULL,
+                    WarehouseId INTEGER NOT NULL,
+                    Stock INTEGER NOT NULL DEFAULT 0,
+                    UpdatedAt TEXT NOT NULL,
+                    PRIMARY KEY (Sku, WarehouseId)
+                );
+                """;
+            stocksCommand.ExecuteNonQuery();
+
+            using var stocksSkuIndex = connection.CreateCommand();
+            stocksSkuIndex.CommandText =
+                """
+                CREATE INDEX IF NOT EXISTS IX_ProductStocks_Sku
+                    ON ProductStocks (Sku);
+                """;
+            stocksSkuIndex.ExecuteNonQuery();
 
             _initialized = true;
         }

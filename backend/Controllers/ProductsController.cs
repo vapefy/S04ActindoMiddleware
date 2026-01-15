@@ -69,6 +69,27 @@ public sealed class ProductsController : ControllerBase
         return Ok(items.Select(MapToDto));
     }
 
+    /// <summary>
+    /// Holt alle Lagerbestände für ein Produkt.
+    /// </summary>
+    [HttpGet("{sku}/stocks")]
+    public async Task<ActionResult<IReadOnlyList<ProductStockItemDto>>> GetStocks(
+        string sku,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sku))
+            return BadRequest("sku ist erforderlich.");
+
+        var items = await _metricsService.GetProductStocksAsync(sku, cancellationToken);
+        return Ok(items.Select(s => new ProductStockItemDto
+        {
+            Sku = s.Sku,
+            WarehouseId = s.WarehouseId,
+            Stock = s.Stock,
+            UpdatedAt = s.UpdatedAt
+        }));
+    }
+
     private static ProductListItemDto MapToDto(ProductListItem p) => new()
     {
         JobId = p.JobId,
@@ -79,7 +100,14 @@ public sealed class ProductsController : ControllerBase
         CreatedAt = p.CreatedAt,
         VariantStatus = p.VariantStatus,
         ParentSku = p.ParentSku,
-        VariantCode = p.VariantCode
+        VariantCode = p.VariantCode,
+        LastPrice = p.LastPrice,
+        LastPriceEmployee = p.LastPriceEmployee,
+        LastPriceMember = p.LastPriceMember,
+        LastStock = p.LastStock,
+        LastWarehouseId = p.LastWarehouseId,
+        LastPriceUpdatedAt = p.LastPriceUpdatedAt,
+        LastStockUpdatedAt = p.LastStockUpdatedAt
     };
 
     [HttpPost("delete")]

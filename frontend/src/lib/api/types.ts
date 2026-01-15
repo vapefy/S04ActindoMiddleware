@@ -104,6 +104,14 @@ export interface ProductListItem {
 	lastStockUpdatedAt: string | null;
 }
 
+// Product Stock Types
+export interface ProductStockItem {
+	sku: string;
+	warehouseId: number;
+	stock: number;
+	updatedAt: string;
+}
+
 // Customer Types
 export interface CustomerListItem {
 	jobId: string;
