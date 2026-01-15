@@ -26,7 +26,7 @@ builder.Services.AddSingleton<IActindoEndpointProvider, ActindoEndpointProvider>
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.LoginPath = "/login.html";
+        options.LoginPath = "/login";
         options.Cookie.Name = "actindo.middleware.auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
@@ -34,7 +34,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromDays(7);
         options.Events.OnRedirectToLogin = context =>
         {
-            // All API routes should return 401 instead of redirecting to login page
+            // API routes should return 401 instead of redirecting
             if (context.Request.Path.StartsWithSegments("/api"))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -122,42 +122,12 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value ?? string.Empty;
-    var isPublic =
-        path.StartsWith("/login", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/register", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/auth", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/styles.css", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/dashboard.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/login.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/register.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/settings.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/products.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/customers.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/users.js", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/favicon", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/_framework", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase);
-
-    if (!isPublic &&
-        (path.Equals("/", StringComparison.OrdinalIgnoreCase) ||
-         path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)))
-    {
-        if (context.User?.Identity?.IsAuthenticated != true)
-        {
-            context.Response.Redirect($"/login.html?returnUrl={Uri.EscapeDataString(path == "/" ? "/" : path)}");
-            return;
-        }
-    }
-
-    await next();
-});
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapControllers();
+
+// SPA Fallback: serve index.html for non-API, non-file routes
+app.MapFallbackToFile("index.html");
 
 app.Run();
