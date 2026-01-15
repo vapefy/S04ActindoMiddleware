@@ -7,7 +7,6 @@ build/
 
 # Node
 node_modules/
-package-lock.json
 
 # User-specific / tooling
 .idea/
