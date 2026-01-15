@@ -1,0 +1,23 @@
+# Build outputs
+bin/
+obj/
+App_Data/
+
+# User-specific / tooling
+.idea/
+.vs/
+*.user
+*.suo
+
+# Logs & diagnostics
+*.log
+*.nlog
+
+# Secrets / local config
+.actindo-refresh-token
+appsettings.Development.json
+
+# Misc
+Thumbs.db
+*.DS_Store
+*.swp

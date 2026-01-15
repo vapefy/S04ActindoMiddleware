@@ -1,0 +1,160 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using ActindoMiddleware.Application.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace ActindoMiddleware.Infrastructure.Nav;
+
+public sealed class NavClient : INavClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly ISettingsStore _settingsStore;
+    private readonly ILogger<NavClient> _logger;
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    public NavClient(
+        HttpClient httpClient,
+        ISettingsStore settingsStore,
+        ILogger<NavClient> logger)
+    {
+        _httpClient = httpClient;
+        _settingsStore = settingsStore;
+        _logger = logger;
+    }
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default)
+    {
+        var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+        return !string.IsNullOrWhiteSpace(settings.NavApiUrl) &&
+               !string.IsNullOrWhiteSpace(settings.NavApiToken);
+    }
+
+    public async Task<IReadOnlyList<NavCustomerRecord>> GetCustomersAsync(CancellationToken cancellationToken = default)
+    {
+        var payload = new { requestType = "actindo.customer.id.get" };
+        var response = await PostAsync(payload, cancellationToken);
+
+        var customers = new List<NavCustomerRecord>();
+
+        if (response.TryGetProperty("customers", out var customersElement) &&
+            customersElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in customersElement.EnumerateArray())
+            {
+                var navId = item.GetProperty("nav_id").GetInt32();
+                int? actindoId = null;
+
+                if (item.TryGetProperty("actindo_id", out var actindoIdElement) &&
+                    actindoIdElement.ValueKind == JsonValueKind.Number)
+                {
+                    actindoId = actindoIdElement.GetInt32();
+                }
+
+                customers.Add(new NavCustomerRecord(navId, actindoId));
+            }
+        }
+
+        _logger.LogInformation("Retrieved {Count} customers from NAV API", customers.Count);
+        return customers;
+    }
+
+    public async Task<IReadOnlyList<NavProductRecord>> GetProductsAsync(CancellationToken cancellationToken = default)
+    {
+        var payload = new { requestType = "actindo.product.id.get" };
+        var response = await PostAsync(payload, cancellationToken);
+
+        var products = new List<NavProductRecord>();
+
+        if (response.TryGetProperty("products", out var productsElement) &&
+            productsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in productsElement.EnumerateArray())
+            {
+                var navId = item.GetProperty("nav_id").GetInt32();
+                var sku = item.TryGetProperty("sku", out var skuElement) ? skuElement.GetString() ?? "" : "";
+                int? actindoId = null;
+
+                if (item.TryGetProperty("actindo_id", out var actindoIdElement) &&
+                    actindoIdElement.ValueKind == JsonValueKind.Number)
+                {
+                    actindoId = actindoIdElement.GetInt32();
+                }
+
+                products.Add(new NavProductRecord(navId, sku, actindoId));
+            }
+        }
+
+        _logger.LogInformation("Retrieved {Count} products from NAV API", products.Count);
+        return products;
+    }
+
+    public async Task SetCustomerActindoIdAsync(int navId, int actindoId, CancellationToken cancellationToken = default)
+    {
+        var payload = new
+        {
+            requestType = "actindo.customer.id.set",
+            customer = new { nav_id = navId, actindo_id = actindoId }
+        };
+
+        await PostAsync(payload, cancellationToken);
+        _logger.LogInformation("Set Actindo ID {ActindoId} for NAV customer {NavId}", actindoId, navId);
+    }
+
+    public async Task SetProductActindoIdsAsync(
+        IEnumerable<(int NavId, int ActindoId)> products,
+        CancellationToken cancellationToken = default)
+    {
+        var productsList = products.Select(p => new { nav_id = p.NavId, actindo_id = p.ActindoId }).ToList();
+
+        if (productsList.Count == 0)
+            return;
+
+        var payload = new
+        {
+            requestType = "actindo.product.id.set",
+            products = productsList
+        };
+
+        await PostAsync(payload, cancellationToken);
+        _logger.LogInformation("Set Actindo IDs for {Count} products in NAV", productsList.Count);
+    }
+
+    private async Task<JsonElement> PostAsync(object payload, CancellationToken cancellationToken)
+    {
+        var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(settings.NavApiUrl))
+            throw new InvalidOperationException("NAV API URL is not configured");
+
+        if (string.IsNullOrWhiteSpace(settings.NavApiToken))
+            throw new InvalidOperationException("NAV API Token is not configured");
+
+        var serializedPayload = JsonSerializer.Serialize(payload, SerializerOptions);
+        _logger.LogInformation("NAV API POST: {Payload}", serializedPayload);
+
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", settings.NavApiToken);
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(settings.NavApiUrl, payload, cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "NAV API response {StatusCode}: {Response}",
+                (int)response.StatusCode,
+                responseContent);
+
+            response.EnsureSuccessStatusCode();
+
+            using var document = JsonDocument.Parse(responseContent);
+            return document.RootElement.Clone();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "NAV API request failed");
+            throw;
+        }
+    }
+}
