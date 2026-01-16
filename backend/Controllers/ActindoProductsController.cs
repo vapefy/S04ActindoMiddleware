@@ -171,15 +171,15 @@ public sealed class ActindoProductsController : ControllerBase
         if (!element.TryGetProperty(fieldName, out var priceObj))
             return null;
 
-        // Versuche: currencies.EUR.base.price (currencies kann Object oder Array sein)
+        // Versuche: currencies.EUR.basePrice.price (currencies kann Object oder Array sein)
         if (priceObj.TryGetProperty("currencies", out var currencies))
         {
             if (currencies.ValueKind == JsonValueKind.Object)
             {
-                // Object: { "EUR": { "base": { "price": 19.99 } } }
+                // Object: { "EUR": { "basePrice": { "price": 19.99 } } }
                 foreach (var currency in currencies.EnumerateObject())
                 {
-                    if (currency.Value.TryGetProperty("base", out var baseProp) &&
+                    if (currency.Value.TryGetProperty("basePrice", out var baseProp) &&
                         baseProp.TryGetProperty("price", out var priceProp))
                     {
                         if (priceProp.TryGetDecimal(out var p))
@@ -189,10 +189,10 @@ public sealed class ActindoProductsController : ControllerBase
             }
             else if (currencies.ValueKind == JsonValueKind.Array)
             {
-                // Array: [{ "base": { "price": 19.99 } }]
+                // Array: [{ "currency": "EUR", "basePrice": { "price": 19.99 } }]
                 foreach (var currency in currencies.EnumerateArray())
                 {
-                    if (currency.TryGetProperty("base", out var baseProp) &&
+                    if (currency.TryGetProperty("basePrice", out var baseProp) &&
                         baseProp.TryGetProperty("price", out var priceProp))
                     {
                         if (priceProp.TryGetDecimal(out var p))
