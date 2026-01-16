@@ -284,7 +284,7 @@
 									<button
 										type="button"
 										onclick={() => openStockModal(product.sku)}
-										class="font-mono text-sm {product.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} hover:underline cursor-pointer"
+										class="font-mono text-sm {product.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer"
 									>
 										{product.lastStock}
 									</button>
@@ -341,7 +341,7 @@
 											<button
 												type="button"
 												onclick={() => openStockModal(variant.sku)}
-												class="font-mono text-sm {variant.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} hover:underline cursor-pointer"
+												class="font-mono text-sm {variant.lastStock > 0 ? 'text-blue-400' : 'text-red-400'} underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer"
 											>
 												{variant.lastStock}
 											</button>
@@ -408,49 +408,49 @@
 						<p>Keine Lagerbestände vorhanden</p>
 					</div>
 				{:else}
-					<table class="w-full">
-						<thead>
-							<tr class="border-b border-white/10">
-								<th class="text-left py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
-									Lager ID
-								</th>
-								<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
-									Bestand
-								</th>
-								<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
-									Aktualisiert
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each stockModalStocks as stock}
-								<tr class="border-b border-white/5">
-									<td class="py-2">
-										<span class="font-mono text-sm">{stock.warehouseId}</span>
-									</td>
-									<td class="py-2 text-right">
-										<span class="font-mono text-sm {stock.stock > 0 ? 'text-blue-400' : 'text-red-400'}">
-											{stock.stock}
-										</span>
-									</td>
-									<td class="py-2 text-right text-sm text-gray-400">
-										{formatDate(stock.updatedAt)}
-									</td>
+					<div class="max-h-80 overflow-y-auto">
+						<table class="w-full">
+							<thead class="sticky top-0 bg-gray-800">
+								<tr class="border-b border-white/10">
+									<th class="text-left py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+										Lager ID
+									</th>
+									<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+										Bestand
+									</th>
+									<th class="text-right py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">
+										Aktualisiert
+									</th>
 								</tr>
-							{/each}
-						</tbody>
-						<tfoot>
-							<tr class="border-t border-white/10">
-								<td class="py-2 font-semibold">Gesamt</td>
-								<td class="py-2 text-right">
-									<span class="font-mono text-sm font-semibold {stockModalTotal > 0 ? 'text-blue-400' : 'text-red-400'}">
-										{stockModalTotal}
-									</span>
-								</td>
-								<td></td>
-							</tr>
-						</tfoot>
-					</table>
+							</thead>
+							<tbody>
+								{#each stockModalStocks as stock}
+									<tr class="border-b border-white/5">
+										<td class="py-2">
+											<span class="font-mono text-sm">{stock.warehouseId}</span>
+										</td>
+										<td class="py-2 text-right">
+											<span class="font-mono text-sm {stock.stock > 0 ? 'text-blue-400' : 'text-red-400'}">
+												{stock.stock}
+											</span>
+										</td>
+										<td class="py-2 text-right text-sm text-gray-400">
+											{formatDate(stock.updatedAt)}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<!-- Footer outside scrollable area -->
+					<div class="border-t border-white/10 mt-2 pt-2">
+						<div class="flex justify-between items-center">
+							<span class="font-semibold">Gesamt</span>
+							<span class="font-mono text-sm font-semibold {stockModalTotal > 0 ? 'text-blue-400' : 'text-red-400'}">
+								{stockModalTotal}
+							</span>
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>

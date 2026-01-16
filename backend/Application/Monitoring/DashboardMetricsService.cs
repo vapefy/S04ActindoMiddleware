@@ -440,7 +440,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                      p.LastPrice,
                      p.LastPriceEmployee,
                      p.LastPriceMember,
-                     p.LastStock,
+                     (SELECT SUM(Stock) FROM ProductStocks s WHERE s.Sku = p.Sku) AS TotalStock,
                      p.LastWarehouseId,
                      p.LastPriceUpdatedAt,
                      p.LastStockUpdatedAt
@@ -462,7 +462,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                      p.LastPrice,
                      p.LastPriceEmployee,
                      p.LastPriceMember,
-                     p.LastStock,
+                     (SELECT SUM(Stock) FROM ProductStocks s WHERE s.Sku = p.Sku) AS TotalStock,
                      p.LastWarehouseId,
                      p.LastPriceUpdatedAt,
                      p.LastStockUpdatedAt
@@ -557,7 +557,7 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                    p.LastPrice,
                    p.LastPriceEmployee,
                    p.LastPriceMember,
-                   p.LastStock,
+                   (SELECT SUM(Stock) FROM ProductStocks s WHERE s.Sku = p.Sku) AS TotalStock,
                    p.LastWarehouseId,
                    p.LastPriceUpdatedAt,
                    p.LastStockUpdatedAt
