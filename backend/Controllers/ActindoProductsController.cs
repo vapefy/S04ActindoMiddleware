@@ -137,9 +137,10 @@ public sealed class ActindoProductsController : ControllerBase
             ?? string.Empty;
     }
 
-    private static (int? actindoId, decimal? price, decimal? priceEmployee, decimal? priceMember) ExtractPriceData(JsonElement element)
+    private static (int? actindoId, string? sku, decimal? price, decimal? priceEmployee, decimal? priceMember) ExtractPriceData(JsonElement element)
     {
         int? actindoId = null;
+        string? sku = null;
         decimal? price = null;
         decimal? priceEmployee = null;
         decimal? priceMember = null;
@@ -153,12 +154,16 @@ public sealed class ActindoProductsController : ControllerBase
                 actindoId = idStr;
         }
 
+        // SKU extrahieren (falls vorhanden)
+        if (element.TryGetProperty("sku", out var skuProp) && skuProp.ValueKind == JsonValueKind.String)
+            sku = skuProp.GetString();
+
         // Basispreis extrahieren: _pim_price.currencies.EUR.base.price
         price = ExtractPriceFromField(element, "_pim_price");
         priceEmployee = ExtractPriceFromField(element, "_pim_price_employee");
         priceMember = ExtractPriceFromField(element, "_pim_price_member");
 
-        return (actindoId, price, priceEmployee, priceMember);
+        return (actindoId, sku, price, priceEmployee, priceMember);
     }
 
     private static decimal? ExtractPriceFromField(JsonElement element, string fieldName)
@@ -197,6 +202,18 @@ public sealed class ActindoProductsController : ControllerBase
             }
         }
 
+        return null;
+    }
+
+    private static string? ExtractSkuFromResponse(JsonElement response)
+    {
+        // Actindo Response: {"product":{"id":172441,"sku":"10855",...},"success":true,...}
+        if (response.TryGetProperty("product", out var product) &&
+            product.TryGetProperty("sku", out var skuProp) &&
+            skuProp.ValueKind == JsonValueKind.String)
+        {
+            return skuProp.GetString();
+        }
         return null;
     }
 
@@ -390,7 +407,7 @@ public sealed class ActindoProductsController : ControllerBase
             var endpoints = await _endpointProvider.GetAsync(cancellationToken);
             var results = new List<JsonElement>();
 
-            var priceUpdates = new List<(int actindoId, decimal? price, decimal? priceEmployee, decimal? priceMember)>();
+            var priceUpdates = new List<(int? actindoId, string? sku, decimal? price, decimal? priceEmployee, decimal? priceMember)>();
 
             if (body.TryGetProperty("variant_prices", out var variantPrices) &&
                 variantPrices.ValueKind == JsonValueKind.Array &&
@@ -405,10 +422,13 @@ public sealed class ActindoProductsController : ControllerBase
                         cancellationToken);
                     results.Add(resp);
 
-                    // Extrahiere Preisdaten für DB-Update
+                    // Extrahiere Preisdaten für DB-Update (aus Request und Response)
                     var priceData = ExtractPriceData(variant);
-                    if (priceData.actindoId.HasValue)
-                        priceUpdates.Add((priceData.actindoId.Value, priceData.price, priceData.priceEmployee, priceData.priceMember));
+                    var skuFromResponse = ExtractSkuFromResponse(resp);
+                    if (!string.IsNullOrWhiteSpace(skuFromResponse))
+                        priceData = (priceData.actindoId, skuFromResponse, priceData.price, priceData.priceEmployee, priceData.priceMember);
+                    if (priceData.actindoId.HasValue || !string.IsNullOrWhiteSpace(priceData.sku))
+                        priceUpdates.Add(priceData);
                 }
             }
             else
@@ -420,21 +440,36 @@ public sealed class ActindoProductsController : ControllerBase
                     cancellationToken);
                 results.Add(resp);
 
-                // Extrahiere Preisdaten für DB-Update
+                // Extrahiere Preisdaten für DB-Update (aus Request und Response)
                 var priceData = ExtractPriceData(body);
-                if (priceData.actindoId.HasValue)
-                    priceUpdates.Add((priceData.actindoId.Value, priceData.price, priceData.priceEmployee, priceData.priceMember));
+                var skuFromResponse = ExtractSkuFromResponse(resp);
+                if (!string.IsNullOrWhiteSpace(skuFromResponse))
+                    priceData = (priceData.actindoId, skuFromResponse, priceData.price, priceData.priceEmployee, priceData.priceMember);
+                if (priceData.actindoId.HasValue || !string.IsNullOrWhiteSpace(priceData.sku))
+                    priceUpdates.Add(priceData);
             }
 
-            // Speichere Preisdaten in DB
+            // Speichere Preisdaten in DB (versuche erst per ActindoId, dann per SKU)
             foreach (var update in priceUpdates)
             {
-                await _dashboardMetrics.UpdateProductPriceByActindoIdAsync(
-                    update.actindoId,
-                    update.price,
-                    update.priceEmployee,
-                    update.priceMember,
-                    cancellationToken);
+                if (update.actindoId.HasValue)
+                {
+                    await _dashboardMetrics.UpdateProductPriceByActindoIdAsync(
+                        update.actindoId.Value,
+                        update.price,
+                        update.priceEmployee,
+                        update.priceMember,
+                        cancellationToken);
+                }
+                if (!string.IsNullOrWhiteSpace(update.sku))
+                {
+                    await _dashboardMetrics.UpdateProductPriceAsync(
+                        update.sku,
+                        update.price,
+                        update.priceEmployee,
+                        update.priceMember,
+                        cancellationToken);
+                }
             }
 
             success = true;
