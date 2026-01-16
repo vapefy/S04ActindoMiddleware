@@ -106,6 +106,29 @@ public sealed class AuthController : ControllerBase
         return NoContent();
     }
 
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var username = User?.FindFirstValue(ClaimTypes.Name);
+        if (string.IsNullOrEmpty(username))
+            return Unauthorized();
+
+        try
+        {
+            await _userStore.ChangePasswordAsync(
+                username,
+                request.CurrentPassword,
+                request.NewPassword,
+                cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private async Task SignInAsync(string username, string role)
     {
         var claims = new List<Claim>

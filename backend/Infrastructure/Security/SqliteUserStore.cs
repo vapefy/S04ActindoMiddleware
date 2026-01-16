@@ -326,6 +326,60 @@ VALUES (@id, @username, @role, @salt, @hash, @iterations, @createdAt);";
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task ChangePasswordAsync(
+        string username,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            throw new InvalidOperationException("Username is required.");
+        if (string.IsNullOrWhiteSpace(currentPassword))
+            throw new InvalidOperationException("Current password is required.");
+        if (string.IsNullOrWhiteSpace(newPassword))
+            throw new InvalidOperationException("New password is required.");
+
+        await EnsureInitializedAsync(cancellationToken);
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        // Verify current password
+        await using var selectCommand = connection.CreateCommand();
+        selectCommand.CommandText = @"
+SELECT Id, PasswordSalt, PasswordHash, PasswordIterations
+FROM Users
+WHERE Username = @username
+LIMIT 1;";
+        selectCommand.Parameters.AddWithValue("@username", username.Trim());
+
+        await using var reader = await selectCommand.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+            throw new InvalidOperationException("User not found.");
+
+        var id = reader.GetString(0);
+        var salt = (byte[])reader["PasswordSalt"];
+        var hash = (byte[])reader["PasswordHash"];
+        var iterations = reader.GetInt32(3);
+
+        if (!PasswordHasher.Verify(currentPassword, salt, hash, iterations))
+            throw new InvalidOperationException("Current password is incorrect.");
+
+        // Hash new password and update
+        var newHashResult = PasswordHasher.Hash(newPassword);
+
+        await using var updateCommand = connection.CreateCommand();
+        updateCommand.CommandText = @"
+UPDATE Users
+SET PasswordSalt = @salt, PasswordHash = @hash, PasswordIterations = @iterations
+WHERE Id = @id;";
+        updateCommand.Parameters.AddWithValue("@salt", newHashResult.Salt);
+        updateCommand.Parameters.AddWithValue("@hash", newHashResult.Hash);
+        updateCommand.Parameters.AddWithValue("@iterations", newHashResult.Iterations);
+        updateCommand.Parameters.AddWithValue("@id", id);
+        await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+
+        _logger.LogInformation("Password changed for user {Username}", username);
+    }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {

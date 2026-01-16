@@ -17,4 +17,5 @@ public interface IUserStore
     Task<IReadOnlyList<RegistrationRecord>> GetRegistrationsAsync(CancellationToken cancellationToken = default);
     Task ApproveRegistrationAsync(Guid registrationId, string role, CancellationToken cancellationToken = default);
     Task DeleteRegistrationAsync(Guid registrationId, CancellationToken cancellationToken = default);
+    Task ChangePasswordAsync(string username, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
 }

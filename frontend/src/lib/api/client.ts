@@ -101,6 +101,12 @@ export const auth = {
 	logout: () =>
 		request<void>('/api/auth/logout', {
 			method: 'POST'
+		}),
+
+	changePassword: (data: { currentPassword: string; newPassword: string }) =>
+		request<void>('/api/auth/change-password', {
+			method: 'POST',
+			body: JSON.stringify(data)
 		})
 };
 
