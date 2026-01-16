@@ -107,8 +107,9 @@
 				return { variant: 'primary' as const, label: 'Master' };
 			case 'child':
 				return { variant: 'default' as const, label: 'Variante' };
+			case 'single':
 			default:
-				return null;
+				return { variant: 'default' as const, label: 'Single' };
 		}
 	}
 </script>
@@ -245,15 +246,11 @@
 
 							<!-- Status -->
 							<td class="py-3 px-4">
-								{#if statusBadge}
-									<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
-									{#if isMaster && product.variantCount}
-										<span class="ml-2 text-xs text-gray-500">
-											({product.variantCount} Varianten)
-										</span>
-									{/if}
-								{:else}
-									<span class="text-gray-500">-</span>
+								<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
+								{#if isMaster && product.variantCount}
+									<span class="ml-2 text-xs text-gray-500">
+										({product.variantCount} Varianten)
+									</span>
 								{/if}
 							</td>
 

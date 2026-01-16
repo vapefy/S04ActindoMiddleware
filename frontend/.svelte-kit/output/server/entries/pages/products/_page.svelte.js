@@ -79,8 +79,9 @@ function _page($$renderer, $$props) {
           return { variant: "primary", label: "Master" };
         case "child":
           return { variant: "default", label: "Variante" };
+        case "single":
         default:
-          return null;
+          return { variant: "default", label: "Single" };
       }
     }
     let $$settled = true;
@@ -189,25 +190,18 @@ function _page($$renderer, $$props) {
                   $$renderer4.push("<!--[!-->");
                 }
                 $$renderer4.push(`<!--]--></td><td class="py-3 px-4"><span${attr_class(`font-mono text-sm ${stringify(isMaster ? "text-royal-300 font-semibold" : "text-royal-300")}`)}>${escape_html(product.sku)}</span></td><td class="py-3 px-4">${escape_html(product.name || "-")}</td><td class="py-3 px-4">`);
-                if (statusBadge) {
-                  $$renderer4.push("<!--[-->");
-                  Badge($$renderer4, {
-                    variant: statusBadge.variant,
-                    children: ($$renderer5) => {
-                      $$renderer5.push(`<!---->${escape_html(statusBadge.label)}`);
-                    }
-                  });
-                  $$renderer4.push(`<!----> `);
-                  if (isMaster && product.variantCount) {
-                    $$renderer4.push("<!--[-->");
-                    $$renderer4.push(`<span class="ml-2 text-xs text-gray-500">(${escape_html(product.variantCount)} Varianten)</span>`);
-                  } else {
-                    $$renderer4.push("<!--[!-->");
+                Badge($$renderer4, {
+                  variant: statusBadge.variant,
+                  children: ($$renderer5) => {
+                    $$renderer5.push(`<!---->${escape_html(statusBadge.label)}`);
                   }
-                  $$renderer4.push(`<!--]-->`);
+                });
+                $$renderer4.push(`<!----> `);
+                if (isMaster && product.variantCount) {
+                  $$renderer4.push("<!--[-->");
+                  $$renderer4.push(`<span class="ml-2 text-xs text-gray-500">(${escape_html(product.variantCount)} Varianten)</span>`);
                 } else {
                   $$renderer4.push("<!--[!-->");
-                  $$renderer4.push(`<span class="text-gray-500">-</span>`);
                 }
                 $$renderer4.push(`<!--]--></td><td class="py-3 px-4">`);
                 if (product.productId) {
