@@ -61,7 +61,8 @@ public sealed class NavClient : INavClient
 
     public async Task<IReadOnlyList<NavProductRecord>> GetProductsAsync(CancellationToken cancellationToken = default)
     {
-        var payload = new { requestType = "actindo.product.id.get" };
+        // Use actindo.product.ids.get (plural) to get products WITH variants
+        var payload = new { requestType = "actindo.product.ids.get" };
         var response = await PostAsync(payload, cancellationToken);
 
         var products = new List<NavProductRecord>();
@@ -71,17 +72,39 @@ public sealed class NavClient : INavClient
         {
             foreach (var item in productsElement.EnumerateArray())
             {
-                var navId = item.GetProperty("nav_id").GetInt32();
-                var sku = item.TryGetProperty("sku", out var skuElement) ? skuElement.GetString() ?? "" : "";
-                int? actindoId = null;
+                var navId = GetStringValue(item, "nav_id");
+                var actindoId = GetStringValue(item, "actindo_id");
+                var name = GetStringValue(item, "name");
 
-                if (item.TryGetProperty("actindo_id", out var actindoIdElement) &&
-                    actindoIdElement.ValueKind == JsonValueKind.Number)
+                // Parse variants if present
+                var variants = new List<NavProductVariant>();
+                if (item.TryGetProperty("variants", out var variantsElement) &&
+                    variantsElement.ValueKind == JsonValueKind.Array)
                 {
-                    actindoId = actindoIdElement.GetInt32();
+                    foreach (var variant in variantsElement.EnumerateArray())
+                    {
+                        var varNavId = GetStringValue(variant, "nav_id");
+                        var varActindoId = GetStringValue(variant, "actindo_id");
+                        var varName = GetStringValue(variant, "name");
+
+                        if (!string.IsNullOrEmpty(varNavId))
+                        {
+                            variants.Add(new NavProductVariant(varNavId, varActindoId, varName ?? string.Empty));
+                        }
+                    }
                 }
 
-                products.Add(new NavProductRecord(navId, sku, actindoId));
+                if (!string.IsNullOrEmpty(navId))
+                {
+                    products.Add(new NavProductRecord
+                    {
+                        NavId = navId,
+                        Sku = navId, // NAV uses nav_id as SKU
+                        ActindoId = actindoId,
+                        Name = name ?? string.Empty,
+                        Variants = variants
+                    });
+                }
             }
         }
 
@@ -102,10 +125,31 @@ public sealed class NavClient : INavClient
     }
 
     public async Task SetProductActindoIdsAsync(
-        IEnumerable<(int NavId, int ActindoId)> products,
+        IEnumerable<NavProductSyncRequest> products,
         CancellationToken cancellationToken = default)
     {
-        var productsList = products.Select(p => new { nav_id = p.NavId, actindo_id = p.ActindoId }).ToList();
+        var productsList = products.Select(p =>
+        {
+            if (p.Variants != null && p.Variants.Count > 0)
+            {
+                return new
+                {
+                    nav_id = p.NavId,
+                    actindo_id = p.ActindoId,
+                    variants = p.Variants.Select(v => new
+                    {
+                        nav_id = v.NavId,
+                        actindo_id = v.ActindoId
+                    }).ToArray()
+                };
+            }
+
+            return (object)new
+            {
+                nav_id = p.NavId,
+                actindo_id = p.ActindoId
+            };
+        }).ToList();
 
         if (productsList.Count == 0)
             return;
@@ -156,5 +200,18 @@ public sealed class NavClient : INavClient
             _logger.LogError(ex, "NAV API request failed");
             throw;
         }
+    }
+
+    private static string? GetStringValue(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var prop))
+            return null;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.String => prop.GetString(),
+            JsonValueKind.Number => prop.GetRawText(),
+            _ => null
+        };
     }
 }

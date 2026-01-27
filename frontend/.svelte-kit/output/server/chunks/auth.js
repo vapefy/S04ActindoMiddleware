@@ -31,6 +31,9 @@ function createAuthStore() {
       await auth.logout();
       set({ user: null, loading: false, initialized: true });
     },
+    async changePassword(currentPassword, newPassword) {
+      await auth.changePassword({ currentPassword, newPassword });
+    },
     setUser(user) {
       update((s) => ({ ...s, user }));
     }

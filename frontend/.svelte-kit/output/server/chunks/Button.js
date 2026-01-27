@@ -1,4 +1,4 @@
-import { d as attr, c as attr_class, e as stringify } from "./index2.js";
+import { d as attr, f as attr_class, g as stringify } from "./index2.js";
 function Button($$renderer, $$props) {
   let {
     variant = "primary",

@@ -1,4 +1,4 @@
-import { s as sanitize_props, a as spread_props, b as slot, c as attr_class, j as bind_props, e as stringify, k as attr_style, f as store_get, u as unsubscribe_stores, h as head, g as ensure_array_like } from "../../../chunks/index2.js";
+import { s as sanitize_props, a as spread_props, b as slot, f as attr_class, j as attr_style, g as stringify, c as store_get, u as unsubscribe_stores, h as head, e as ensure_array_like } from "../../../chunks/index2.js";
 import { j as jobsStore } from "../../../chunks/dashboard.js";
 import { p as permissions } from "../../../chunks/auth.js";
 import { b as formatDuration, a as formatDate, p as prettifyJson } from "../../../chunks/format.js";
@@ -7,11 +7,11 @@ import { C as Card } from "../../../chunks/Card.js";
 import { B as Button } from "../../../chunks/Button.js";
 import { I as Input } from "../../../chunks/Input.js";
 import { B as Badge } from "../../../chunks/Badge.js";
-import { X, A as Alert } from "../../../chunks/Alert.js";
+import { A as Alert } from "../../../chunks/Alert.js";
 import { I as Icon, S as Spinner } from "../../../chunks/Spinner.js";
+import { A as Activity, M as Modal } from "../../../chunks/Modal.js";
 import { $ as escape_html } from "../../../chunks/context.js";
 import { S as Search } from "../../../chunks/search.js";
-import { A as Activity } from "../../../chunks/activity.js";
 import { C as Chevron_right } from "../../../chunks/chevron-right.js";
 import { T as Trash_2 } from "../../../chunks/trash-2.js";
 function Chevron_left($$renderer, $$props) {
@@ -133,46 +133,6 @@ function Play($$renderer, $$props) {
       $$slots: { default: true }
     }
   ]));
-}
-function Modal($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let {
-      open = false,
-      title = "",
-      class: className = "",
-      onclose,
-      children,
-      footer
-    } = $$props;
-    if (open) {
-      $$renderer2.push("<!--[-->");
-      $$renderer2.push(`<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-900/85 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true"><div${attr_class(` w-full max-w-2xl bg-dark-800 border border-white/10 rounded-2xl shadow-2xl animate-slide-up ${stringify(className)} `)}>`);
-      if (title) {
-        $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<div class="flex items-center justify-between px-6 py-4 border-b border-white/10"><h2 class="text-lg font-semibold">${escape_html(title)}</h2> <button type="button" class="p-2 rounded-lg hover:bg-white/10 transition-colors">`);
-        X($$renderer2, { size: 20 });
-        $$renderer2.push(`<!----></button></div>`);
-      } else {
-        $$renderer2.push("<!--[!-->");
-      }
-      $$renderer2.push(`<!--]--> <div class="p-6">`);
-      children($$renderer2);
-      $$renderer2.push(`<!----></div> `);
-      if (footer) {
-        $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<div class="flex justify-end gap-3 px-6 py-4 border-t border-white/10">`);
-        footer($$renderer2);
-        $$renderer2.push(`<!----></div>`);
-      } else {
-        $$renderer2.push("<!--[!-->");
-      }
-      $$renderer2.push(`<!--]--></div></div>`);
-    } else {
-      $$renderer2.push("<!--[!-->");
-    }
-    $$renderer2.push(`<!--]-->`);
-    bind_props($$props, { open });
-  });
 }
 function CodeBlock($$renderer, $$props) {
   let {

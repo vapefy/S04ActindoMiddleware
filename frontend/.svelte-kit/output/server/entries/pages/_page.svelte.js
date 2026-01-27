@@ -1,4 +1,4 @@
-import { f as store_get, h as head, u as unsubscribe_stores } from "../../chunks/index2.js";
+import { c as store_get, h as head, u as unsubscribe_stores } from "../../chunks/index2.js";
 import { d as dashboardStore } from "../../chunks/dashboard.js";
 import { $ as escape_html } from "../../chunks/context.js";
 import "clsx";

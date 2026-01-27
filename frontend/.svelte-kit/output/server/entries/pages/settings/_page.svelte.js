@@ -1,4 +1,4 @@
-import { s as sanitize_props, a as spread_props, b as slot, f as store_get, u as unsubscribe_stores, h as head, g as ensure_array_like, d as attr, e as stringify } from "../../../chunks/index2.js";
+import { s as sanitize_props, a as spread_props, b as slot, c as store_get, u as unsubscribe_stores, h as head, e as ensure_array_like, d as attr, g as stringify } from "../../../chunks/index2.js";
 import "@sveltejs/kit/internal";
 import "../../../chunks/exports.js";
 import "../../../chunks/utils.js";

@@ -1,4 +1,4 @@
-import { d as attr, c as attr_class, j as bind_props, e as stringify } from "./index2.js";
+import { d as attr, f as attr_class, k as bind_props, g as stringify } from "./index2.js";
 function Input($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let {

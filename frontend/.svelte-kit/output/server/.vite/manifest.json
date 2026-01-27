@@ -45,6 +45,15 @@
       "_index2.js"
     ]
   },
+  "_Modal.js": {
+    "file": "chunks/Modal.js",
+    "name": "Modal",
+    "imports": [
+      "_index2.js",
+      "_Spinner.js",
+      "_context.js"
+    ]
+  },
   "_PageHeader.js": {
     "file": "chunks/PageHeader.js",
     "name": "PageHeader",
@@ -60,14 +69,6 @@
     "imports": [
       "_index2.js",
       "_context.js"
-    ]
-  },
-  "_activity.js": {
-    "file": "chunks/activity.js",
-    "name": "activity",
-    "imports": [
-      "_index2.js",
-      "_Spinner.js"
     ]
   },
   "_arrow-right-left.js": {
@@ -279,16 +280,16 @@
       "_auth.js",
       "_dashboard.js",
       "_Button.js",
-      "_Spinner.js",
+      "_Modal.js",
       "_package.js",
+      "_Spinner.js",
       "_users.js",
-      "_activity.js",
       "_arrow-right-left.js",
       "_circle-user.js",
       "_settings.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BwI8NsCZ.css"
+      "_app/immutable/assets/_layout.-OiEhe6i.css"
     ]
   },
   "src/routes/+page.svelte": {
@@ -343,9 +344,9 @@
       "_Badge.js",
       "_Alert.js",
       "_Spinner.js",
+      "_Modal.js",
       "_context.js",
       "_search.js",
-      "_activity.js",
       "_chevron-right.js",
       "_trash-2.js"
     ]
@@ -451,6 +452,8 @@
       "_package.js",
       "_users.js",
       "_arrow-right-left.js",
+      "_chevron-right.js",
+      "_trash-2.js",
       "_context.js"
     ]
   },

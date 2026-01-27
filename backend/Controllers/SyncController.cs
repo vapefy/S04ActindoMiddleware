@@ -1,6 +1,7 @@
 using ActindoMiddleware.Application.Monitoring;
 using ActindoMiddleware.Application.Security;
 using ActindoMiddleware.DTOs.Responses;
+using ActindoMiddleware.Infrastructure.Actindo;
 using ActindoMiddleware.Infrastructure.Nav;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,15 +14,18 @@ namespace ActindoMiddleware.Controllers;
 public sealed class SyncController : ControllerBase
 {
     private readonly INavClient _navClient;
+    private readonly ActindoProductListService _actindoProductService;
     private readonly IDashboardMetricsService _dashboardMetrics;
     private readonly ILogger<SyncController> _logger;
 
     public SyncController(
         INavClient navClient,
+        ActindoProductListService actindoProductService,
         IDashboardMetricsService dashboardMetrics,
         ILogger<SyncController> logger)
     {
         _navClient = navClient;
+        _actindoProductService = actindoProductService;
         _dashboardMetrics = dashboardMetrics;
         _logger = logger;
     }
@@ -37,7 +41,7 @@ public sealed class SyncController : ControllerBase
     }
 
     /// <summary>
-    /// Get product sync status
+    /// Get product sync status (3-way comparison: Actindo, NAV, Middleware)
     /// </summary>
     [HttpGet("products")]
     public async Task<ActionResult<ProductSyncStatusDto>> GetProductSyncStatus(CancellationToken cancellationToken)
@@ -48,61 +52,265 @@ public sealed class SyncController : ControllerBase
             return BadRequest(new { error = "NAV API is not configured" });
         }
 
-        // Get products from Middleware
-        var middlewareProducts = await _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
-
-        // Get products from NAV
+        // Get products from all three sources
+        IReadOnlyList<ActindoSyncProduct> actindoProducts;
         IReadOnlyList<NavProductRecord> navProducts;
+        IReadOnlyList<ProductListItem> middlewareProducts;
+
         try
         {
-            navProducts = await _navClient.GetProductsAsync(cancellationToken);
+            // Parallel fetching for better performance
+            var actindoTask = _actindoProductService.GetAllProductsForSyncAsync(cancellationToken);
+            var navTask = _navClient.GetProductsAsync(cancellationToken);
+            var middlewareTask = _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
+
+            await Task.WhenAll(actindoTask, navTask, middlewareTask);
+
+            actindoProducts = actindoTask.Result;
+            navProducts = navTask.Result;
+            middlewareProducts = middlewareTask.Result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get products from NAV");
-            return StatusCode(502, new { error = "Failed to connect to NAV API", details = ex.Message });
+            _logger.LogError(ex, "Failed to fetch products from one or more sources");
+            return StatusCode(502, new { error = "Failed to connect to APIs", details = ex.Message });
         }
 
-        // Create lookup by SKU
+        // Create lookups
+        var actindoBySku = actindoProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var actindoById = actindoProducts.ToDictionary(p => p.Id.ToString(), StringComparer.OrdinalIgnoreCase);
         var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareBySku = middlewareProducts
+            .Where(p => p.VariantStatus != "child") // Only masters and singles
+            .ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareChildrenBySku = middlewareProducts
+            .Where(p => p.VariantStatus == "child")
+            .ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+
+        // Collect all unique SKUs (excluding children - they'll be nested)
+        var allMasterSkus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in actindoProducts.Where(x => x.VariantStatus != "child"))
+            allMasterSkus.Add(p.Sku);
+        foreach (var p in navProducts)
+            allMasterSkus.Add(p.Sku);
+        foreach (var p in middlewareProducts.Where(x => x.VariantStatus != "child"))
+            allMasterSkus.Add(p.Sku);
 
         var items = new List<ProductSyncItemDto>();
-        var needsSync = 0;
         var synced = 0;
+        var needsSync = 0;
+        var orphaned = 0;
 
-        foreach (var product in middlewareProducts)
+        foreach (var sku in allMasterSkus.OrderBy(s => s))
         {
-            navBySku.TryGetValue(product.Sku, out var navProduct);
+            actindoBySku.TryGetValue(sku, out var actindo);
+            navBySku.TryGetValue(sku, out var nav);
+            middlewareBySku.TryGetValue(sku, out var middleware);
 
-            var hasMiddlewareId = product.ProductId.HasValue;
-            var hasNavId = navProduct?.ActindoId.HasValue == true;
-            var requiresSync = hasMiddlewareId && !hasNavId;
+            var inActindo = actindo != null;
+            var inNav = nav != null;
+            var inMiddleware = middleware != null;
 
-            if (requiresSync)
-                needsSync++;
-            else if (hasMiddlewareId && hasNavId)
-                synced++;
+            var actindoId = actindo?.Id.ToString();
+            var navActindoId = nav?.ActindoId;
+            var middlewareActindoId = middleware?.ProductId?.ToString();
+
+            // Determine variant status
+            var variantStatus = actindo?.VariantStatus ?? middleware?.VariantStatus ?? "single";
+            if (nav?.Variants.Count > 0 && variantStatus == "single")
+                variantStatus = "master";
+
+            // Determine sync status
+            var status = DetermineStatus(inActindo, inNav, inMiddleware, actindoId, navActindoId, middlewareActindoId);
+
+            // Process variants for master products
+            var variants = new List<ProductVariantSyncItemDto>();
+            if (variantStatus == "master")
+            {
+                variants = BuildVariantsList(sku, actindoProducts, nav, middlewareChildrenBySku, actindoById);
+            }
+
+            // Count variants status
+            var variantNeedsSync = variants.Count(v => v.Status == SyncStatus.NeedsSync);
+            var variantOrphaned = variants.Count(v => v.Status == SyncStatus.Orphan);
+
+            // Aggregate status - if any variant needs sync, parent needs sync
+            if (variantNeedsSync > 0 && status == SyncStatus.Synced)
+                status = SyncStatus.NeedsSync;
+
+            switch (status)
+            {
+                case SyncStatus.Synced:
+                    synced++;
+                    break;
+                case SyncStatus.NeedsSync:
+                    needsSync++;
+                    break;
+                case SyncStatus.Orphan:
+                    orphaned++;
+                    break;
+            }
+
+            var name = actindo?.Name ?? nav?.Name ?? middleware?.Name ?? string.Empty;
 
             items.Add(new ProductSyncItemDto
             {
-                Sku = product.Sku,
-                Name = product.Name,
-                MiddlewareActindoId = product.ProductId,
-                NavNavId = navProduct?.NavId,
-                NavActindoId = navProduct?.ActindoId,
-                NeedsSync = requiresSync,
-                VariantStatus = product.VariantStatus
+                Sku = sku,
+                Name = name,
+                VariantStatus = variantStatus,
+                ActindoId = actindoId,
+                NavActindoId = navActindoId,
+                MiddlewareActindoId = middlewareActindoId,
+                InActindo = inActindo,
+                InNav = inNav,
+                InMiddleware = inMiddleware,
+                Status = status,
+                Variants = variants
             });
         }
 
         return Ok(new ProductSyncStatusDto
         {
-            TotalInMiddleware = middlewareProducts.Count,
+            TotalInActindo = actindoProducts.Count(p => p.VariantStatus != "child"),
             TotalInNav = navProducts.Count,
+            TotalInMiddleware = middlewareProducts.Count(p => p.VariantStatus != "child"),
             Synced = synced,
             NeedsSync = needsSync,
+            Orphaned = orphaned,
             Items = items
         });
+    }
+
+    private List<ProductVariantSyncItemDto> BuildVariantsList(
+        string masterSku,
+        IReadOnlyList<ActindoSyncProduct> actindoProducts,
+        NavProductRecord? nav,
+        Dictionary<string, ProductListItem> middlewareChildren,
+        Dictionary<string, ActindoSyncProduct> actindoById)
+    {
+        var variants = new List<ProductVariantSyncItemDto>();
+
+        // Collect all variant SKUs
+        var allVariantSkus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // From Actindo (children with matching prefix)
+        foreach (var child in actindoProducts.Where(p =>
+            p.VariantStatus == "child" &&
+            p.Sku.StartsWith(masterSku + "-", StringComparison.OrdinalIgnoreCase)))
+        {
+            allVariantSkus.Add(child.Sku);
+        }
+
+        // From NAV variants
+        if (nav?.Variants != null)
+        {
+            foreach (var v in nav.Variants)
+                allVariantSkus.Add(v.NavId);
+        }
+
+        // From Middleware children
+        foreach (var child in middlewareChildren.Where(kv =>
+            kv.Value.ParentSku == masterSku ||
+            kv.Key.StartsWith(masterSku + "-", StringComparison.OrdinalIgnoreCase)))
+        {
+            allVariantSkus.Add(child.Key);
+        }
+
+        foreach (var varSku in allVariantSkus.OrderBy(s => s))
+        {
+            // Find in Actindo
+            var actindoChild = actindoProducts.FirstOrDefault(p =>
+                p.VariantStatus == "child" &&
+                string.Equals(p.Sku, varSku, StringComparison.OrdinalIgnoreCase));
+
+            // Find in NAV
+            var navVariant = nav?.Variants.FirstOrDefault(v =>
+                string.Equals(v.NavId, varSku, StringComparison.OrdinalIgnoreCase));
+
+            // Find in Middleware
+            middlewareChildren.TryGetValue(varSku, out var mwChild);
+
+            var inActindo = actindoChild != null;
+            var inNav = navVariant != null;
+            var inMiddleware = mwChild != null;
+
+            var actindoId = actindoChild?.Id.ToString();
+            var navActindoId = navVariant?.ActindoId;
+            var mwActindoId = mwChild?.ProductId?.ToString();
+
+            var status = DetermineStatus(inActindo, inNav, inMiddleware, actindoId, navActindoId, mwActindoId);
+
+            // Extract variant code (part after the dash)
+            var variantCode = varSku.StartsWith(masterSku + "-", StringComparison.OrdinalIgnoreCase)
+                ? varSku[(masterSku.Length + 1)..]
+                : varSku;
+
+            var name = actindoChild?.Name ?? navVariant?.Name ?? mwChild?.Name ?? string.Empty;
+
+            variants.Add(new ProductVariantSyncItemDto
+            {
+                Sku = varSku,
+                VariantCode = variantCode,
+                Name = name,
+                ActindoId = actindoId,
+                NavActindoId = navActindoId,
+                MiddlewareActindoId = mwActindoId,
+                InActindo = inActindo,
+                InNav = inNav,
+                InMiddleware = inMiddleware,
+                Status = status
+            });
+        }
+
+        return variants;
+    }
+
+    private static SyncStatus DetermineStatus(
+        bool inActindo,
+        bool inNav,
+        bool inMiddleware,
+        string? actindoId,
+        string? navActindoId,
+        string? middlewareActindoId)
+    {
+        // Orphan: Has ID in NAV or Middleware but product doesn't exist in Actindo
+        if (!inActindo && (inNav || inMiddleware) && (!string.IsNullOrEmpty(navActindoId) || !string.IsNullOrEmpty(middlewareActindoId)))
+        {
+            return SyncStatus.Orphan;
+        }
+
+        // Actindo only: Exists in Actindo but not in NAV or Middleware
+        if (inActindo && !inNav && !inMiddleware)
+        {
+            return SyncStatus.ActindoOnly;
+        }
+
+        // NAV only: Exists in NAV but not in Actindo (and no Actindo ID)
+        if (inNav && !inActindo && string.IsNullOrEmpty(navActindoId))
+        {
+            return SyncStatus.NavOnly;
+        }
+
+        // Needs sync: Middleware has Actindo ID but NAV doesn't
+        if (!string.IsNullOrEmpty(middlewareActindoId) && string.IsNullOrEmpty(navActindoId))
+        {
+            return SyncStatus.NeedsSync;
+        }
+
+        // Also needs sync: Actindo ID exists but NAV doesn't have it
+        if (!string.IsNullOrEmpty(actindoId) && inNav && string.IsNullOrEmpty(navActindoId))
+        {
+            return SyncStatus.NeedsSync;
+        }
+
+        // Synced: All systems have matching IDs
+        if (inActindo && inNav && !string.IsNullOrEmpty(navActindoId))
+        {
+            return SyncStatus.Synced;
+        }
+
+        // Default to synced if nothing else matches
+        return SyncStatus.Synced;
     }
 
     /// <summary>
@@ -138,7 +346,7 @@ public sealed class SyncController : ControllerBase
             StringComparer.OrdinalIgnoreCase);
 
         var items = new List<CustomerSyncItemDto>();
-        var needsSync = 0;
+        var needsSyncCount = 0;
         var synced = 0;
 
         foreach (var customer in middlewareCustomers)
@@ -150,7 +358,7 @@ public sealed class SyncController : ControllerBase
             var requiresSync = hasMiddlewareId && !hasNavId;
 
             if (requiresSync)
-                needsSync++;
+                needsSyncCount++;
             else if (hasMiddlewareId && hasNavId)
                 synced++;
 
@@ -170,7 +378,7 @@ public sealed class SyncController : ControllerBase
             TotalInMiddleware = middlewareCustomers.Count,
             TotalInNav = navCustomers.Count,
             Synced = synced,
-            NeedsSync = needsSync,
+            NeedsSync = needsSyncCount,
             Items = items
         });
     }
@@ -192,21 +400,34 @@ public sealed class SyncController : ControllerBase
             return BadRequest(new { error = "NAV API is not configured" });
         }
 
-        // Get products from Middleware
-        var middlewareProducts = await _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
-        var productsBySku = middlewareProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
-
-        // Get products from NAV to get the NAV IDs
+        // Get products from all sources
+        var actindoProducts = await _actindoProductService.GetAllProductsForSyncAsync(cancellationToken);
         var navProducts = await _navClient.GetProductsAsync(cancellationToken);
-        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareProducts = await _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
 
-        var toSync = new List<(int NavId, int ActindoId)>();
+        var actindoBySku = actindoProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareBySku = middlewareProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+
+        var toSync = new List<NavProductSyncRequest>();
 
         foreach (var sku in request.Skus)
         {
-            if (!productsBySku.TryGetValue(sku, out var product) || !product.ProductId.HasValue)
+            // Get Actindo ID from either Actindo directly or Middleware
+            string? actindoId = null;
+
+            if (actindoBySku.TryGetValue(sku, out var actindoProduct))
             {
-                _logger.LogWarning("Product {Sku} not found in Middleware or has no Actindo ID", sku);
+                actindoId = actindoProduct.Id.ToString();
+            }
+            else if (middlewareBySku.TryGetValue(sku, out var mwProduct) && mwProduct.ProductId.HasValue)
+            {
+                actindoId = mwProduct.ProductId.Value.ToString();
+            }
+
+            if (string.IsNullOrEmpty(actindoId))
+            {
+                _logger.LogWarning("Product {Sku} has no Actindo ID", sku);
                 continue;
             }
 
@@ -216,12 +437,58 @@ public sealed class SyncController : ControllerBase
                 continue;
             }
 
-            toSync.Add((navProduct.NavId, product.ProductId.Value));
+            // Build variant sync list if applicable
+            List<NavVariantSyncRequest>? variantSyncs = null;
+            if (navProduct.Variants.Count > 0)
+            {
+                variantSyncs = new List<NavVariantSyncRequest>();
+                foreach (var navVariant in navProduct.Variants)
+                {
+                    // Get Actindo ID for variant
+                    string? variantActindoId = null;
+
+                    if (actindoBySku.TryGetValue(navVariant.NavId, out var actindoVariant))
+                    {
+                        variantActindoId = actindoVariant.Id.ToString();
+                    }
+                    else if (middlewareBySku.TryGetValue(navVariant.NavId, out var mwVariant) && mwVariant.ProductId.HasValue)
+                    {
+                        variantActindoId = mwVariant.ProductId.Value.ToString();
+                    }
+
+                    if (!string.IsNullOrEmpty(variantActindoId) && string.IsNullOrEmpty(navVariant.ActindoId))
+                    {
+                        // Extract just the variant code (e.g., "L" from "1042-L")
+                        var variantCode = navVariant.NavId;
+                        if (navVariant.NavId.StartsWith(sku + "-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            variantCode = navVariant.NavId[(sku.Length + 1)..];
+                        }
+
+                        variantSyncs.Add(new NavVariantSyncRequest
+                        {
+                            NavId = variantCode,
+                            ActindoId = variantActindoId
+                        });
+                    }
+                }
+            }
+
+            // Only sync if NAV doesn't already have the Actindo ID
+            if (string.IsNullOrEmpty(navProduct.ActindoId) || (variantSyncs?.Count > 0))
+            {
+                toSync.Add(new NavProductSyncRequest
+                {
+                    NavId = sku,
+                    ActindoId = actindoId,
+                    Variants = variantSyncs?.Count > 0 ? variantSyncs : null
+                });
+            }
         }
 
         if (toSync.Count == 0)
         {
-            return BadRequest(new { error = "No valid products to sync" });
+            return Ok(new { synced = 0, message = "No products need syncing" });
         }
 
         try
@@ -299,28 +566,83 @@ public sealed class SyncController : ControllerBase
             return BadRequest(new { error = "NAV API is not configured" });
         }
 
-        // Get products from Middleware
+        // Get products from all sources
+        var actindoProducts = await _actindoProductService.GetAllProductsForSyncAsync(cancellationToken);
+        var navProducts = await _navClient.GetProductsAsync(cancellationToken);
         var middlewareProducts = await _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
 
-        // Get products from NAV
-        var navProducts = await _navClient.GetProductsAsync(cancellationToken);
-        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var actindoBySku = actindoProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareBySku = middlewareProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
 
-        var toSync = new List<(int NavId, int ActindoId)>();
+        var toSync = new List<NavProductSyncRequest>();
 
-        foreach (var product in middlewareProducts)
+        foreach (var navProduct in navProducts)
         {
-            if (!product.ProductId.HasValue)
+            // Get Actindo ID from either Actindo directly or Middleware
+            string? actindoId = null;
+
+            if (actindoBySku.TryGetValue(navProduct.Sku, out var actindoProduct))
+            {
+                actindoId = actindoProduct.Id.ToString();
+            }
+            else if (middlewareBySku.TryGetValue(navProduct.Sku, out var mwProduct) && mwProduct.ProductId.HasValue)
+            {
+                actindoId = mwProduct.ProductId.Value.ToString();
+            }
+
+            if (string.IsNullOrEmpty(actindoId))
                 continue;
 
-            if (!navBySku.TryGetValue(product.Sku, out var navProduct))
-                continue;
+            // Build variant sync list
+            List<NavVariantSyncRequest>? variantSyncs = null;
+            if (navProduct.Variants.Count > 0)
+            {
+                variantSyncs = new List<NavVariantSyncRequest>();
+                foreach (var navVariant in navProduct.Variants)
+                {
+                    if (!string.IsNullOrEmpty(navVariant.ActindoId))
+                        continue; // Already synced
 
-            // Only sync if NAV doesn't have the Actindo ID yet
-            if (navProduct.ActindoId.HasValue)
-                continue;
+                    string? variantActindoId = null;
+                    if (actindoBySku.TryGetValue(navVariant.NavId, out var actindoVariant))
+                    {
+                        variantActindoId = actindoVariant.Id.ToString();
+                    }
+                    else if (middlewareBySku.TryGetValue(navVariant.NavId, out var mwVariant) && mwVariant.ProductId.HasValue)
+                    {
+                        variantActindoId = mwVariant.ProductId.Value.ToString();
+                    }
 
-            toSync.Add((navProduct.NavId, product.ProductId.Value));
+                    if (!string.IsNullOrEmpty(variantActindoId))
+                    {
+                        var variantCode = navVariant.NavId;
+                        if (navVariant.NavId.StartsWith(navProduct.Sku + "-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            variantCode = navVariant.NavId[(navProduct.Sku.Length + 1)..];
+                        }
+
+                        variantSyncs.Add(new NavVariantSyncRequest
+                        {
+                            NavId = variantCode,
+                            ActindoId = variantActindoId
+                        });
+                    }
+                }
+            }
+
+            // Only sync if NAV doesn't already have the Actindo ID or has variants to sync
+            var needsMasterSync = string.IsNullOrEmpty(navProduct.ActindoId);
+            var needsVariantSync = variantSyncs?.Count > 0;
+
+            if (needsMasterSync || needsVariantSync)
+            {
+                toSync.Add(new NavProductSyncRequest
+                {
+                    NavId = navProduct.Sku,
+                    ActindoId = actindoId,
+                    Variants = variantSyncs?.Count > 0 ? variantSyncs : null
+                });
+            }
         }
 
         if (toSync.Count == 0)

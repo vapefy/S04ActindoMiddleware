@@ -1,4 +1,4 @@
-import { s as sanitize_props, a as spread_props, b as slot, f as store_get, h as head, c as attr_class, e as stringify, g as ensure_array_like, d as attr, u as unsubscribe_stores } from "../../../chunks/index2.js";
+import { s as sanitize_props, a as spread_props, b as slot, c as store_get, h as head, f as attr_class, g as stringify, e as ensure_array_like, d as attr, u as unsubscribe_stores } from "../../../chunks/index2.js";
 import { g as goto } from "../../../chunks/client.js";
 import { w as writable } from "../../../chunks/index.js";
 import { a as sync } from "../../../chunks/client2.js";
@@ -10,9 +10,11 @@ import { A as Alert } from "../../../chunks/Alert.js";
 import { I as Icon, S as Spinner } from "../../../chunks/Spinner.js";
 import { B as Badge } from "../../../chunks/Badge.js";
 import { S as Settings } from "../../../chunks/settings.js";
-import { P as Package } from "../../../chunks/package.js";
+import { P as Package, C as Chevron_down } from "../../../chunks/package.js";
 import { U as Users } from "../../../chunks/users.js";
 import { A as Arrow_right_left } from "../../../chunks/arrow-right-left.js";
+import { C as Chevron_right } from "../../../chunks/chevron-right.js";
+import { T as Trash_2 } from "../../../chunks/trash-2.js";
 import { $ as escape_html } from "../../../chunks/context.js";
 function Circle_check($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
@@ -89,6 +91,44 @@ function Circle_x($$renderer, $$props) {
     }
   ]));
 }
+function Info($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    ["circle", { "cx": "12", "cy": "12", "r": "10" }],
+    ["path", { "d": "M12 16v-4" }],
+    ["path", { "d": "M12 8h.01" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "info" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Info
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIgLz4KICA8cGF0aCBkPSJNMTIgMTZ2LTQiIC8+CiAgPHBhdGggZD0iTTEyIDhoLjAxIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/info
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
 function Triangle_alert($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   /**
@@ -142,7 +182,8 @@ function createSyncStore() {
     syncing: false,
     error: null,
     selectedProductSkus: /* @__PURE__ */ new Set(),
-    selectedCustomerIds: /* @__PURE__ */ new Set()
+    selectedCustomerIds: /* @__PURE__ */ new Set(),
+    expandedProducts: /* @__PURE__ */ new Set()
   });
   let currentState;
   subscribe((s) => currentState = s);
@@ -170,7 +211,8 @@ function createSyncStore() {
           ...s,
           products,
           loading: false,
-          selectedProductSkus: /* @__PURE__ */ new Set()
+          selectedProductSkus: /* @__PURE__ */ new Set(),
+          expandedProducts: /* @__PURE__ */ new Set()
         }));
       } catch (e) {
         update((s) => ({
@@ -220,15 +262,47 @@ function createSyncStore() {
     selectAllProducts(needsSyncOnly = false) {
       update((s) => {
         if (!s.products) return s;
-        const items = needsSyncOnly ? s.products.items.filter((p) => p.needsSync) : s.products.items;
+        const items = needsSyncOnly ? s.products.items.filter((p) => p.needsSync || p.status === "NeedsSync") : s.products.items;
+        const skus = [];
+        for (const item of items) {
+          skus.push(item.sku);
+          if (item.variants) {
+            for (const v of item.variants) {
+              if (!needsSyncOnly || v.status === "NeedsSync") {
+                skus.push(v.sku);
+              }
+            }
+          }
+        }
         return {
           ...s,
-          selectedProductSkus: new Set(items.map((p) => p.sku))
+          selectedProductSkus: new Set(skus)
         };
       });
     },
     clearProductSelection() {
       update((s) => ({ ...s, selectedProductSkus: /* @__PURE__ */ new Set() }));
+    },
+    toggleProductExpanded(sku) {
+      update((s) => {
+        const newSet = new Set(s.expandedProducts);
+        if (newSet.has(sku)) {
+          newSet.delete(sku);
+        } else {
+          newSet.add(sku);
+        }
+        return { ...s, expandedProducts: newSet };
+      });
+    },
+    expandAllProducts() {
+      update((s) => {
+        if (!s.products) return s;
+        const masters = s.products.items.filter((p) => p.variantStatus === "master" && p.variants.length > 0).map((p) => p.sku);
+        return { ...s, expandedProducts: new Set(masters) };
+      });
+    },
+    collapseAllProducts() {
+      update((s) => ({ ...s, expandedProducts: /* @__PURE__ */ new Set() }));
     },
     toggleCustomerSelection(debtorNumber) {
       update((s) => {
@@ -346,7 +420,8 @@ function createSyncStore() {
         syncing: false,
         error: null,
         selectedProductSkus: /* @__PURE__ */ new Set(),
-        selectedCustomerIds: /* @__PURE__ */ new Set()
+        selectedCustomerIds: /* @__PURE__ */ new Set(),
+        expandedProducts: /* @__PURE__ */ new Set()
       });
     }
   };
@@ -356,12 +431,12 @@ function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
     store_get($$store_subs ??= {}, "$permissions", permissions);
-    let state = store_get($$store_subs ??= {}, "$syncStore", syncStore);
+    let syncState = store_get($$store_subs ??= {}, "$syncStore", syncStore);
     let successMessage = "";
     async function handleSyncSelected() {
       try {
         let result;
-        if (state.tab === "products") {
+        if (syncState.tab === "products") {
           result = await syncStore.syncSelectedProducts();
           successMessage = `${result.synced} Produkt(e) synchronisiert`;
         } else {
@@ -379,7 +454,7 @@ function _page($$renderer, $$props) {
       if (!confirm("Alle fehlenden Actindo-IDs zu NAV synchronisieren?")) return;
       try {
         let result;
-        if (state.tab === "products") {
+        if (syncState.tab === "products") {
           result = await syncStore.syncAllProducts();
           if (result.message) {
             successMessage = result.message;
@@ -398,21 +473,57 @@ function _page($$renderer, $$props) {
       }
     }
     function handleSelectAllNeedsSync() {
-      if (state.tab === "products") {
+      if (syncState.tab === "products") {
         syncStore.selectAllProducts(true);
       } else {
         syncStore.selectAllCustomers(true);
       }
     }
     function handleClearSelection() {
-      if (state.tab === "products") {
+      if (syncState.tab === "products") {
         syncStore.clearProductSelection();
       } else {
         syncStore.clearCustomerSelection();
       }
     }
-    let selectedCount = state.tab === "products" ? state.selectedProductSkus.size : state.selectedCustomerIds.size;
-    let needsSyncCount = state.tab === "products" ? state.products?.needsSync ?? 0 : state.customers?.needsSync ?? 0;
+    let selectedCount = syncState.tab === "products" ? syncState.selectedProductSkus.size : syncState.selectedCustomerIds.size;
+    let needsSyncCount = syncState.tab === "products" ? syncState.products?.needsSync ?? 0 : syncState.customers?.needsSync ?? 0;
+    let orphanCount = syncState.products?.orphaned ?? 0;
+    function getStatusBadge(status) {
+      switch (status) {
+        case "Synced":
+          return { variant: "success", label: "Sync" };
+        case "NeedsSync":
+          return { variant: "warning", label: "Sync fehlt" };
+        case "Orphan":
+          return { variant: "error", label: "Verwaist" };
+        case "ActindoOnly":
+          return { variant: "info", label: "Nur Actindo" };
+        case "NavOnly":
+          return { variant: "secondary", label: "Nur NAV" };
+        default:
+          return { variant: "default", label: status };
+      }
+    }
+    function getStatusIcon(status) {
+      switch (status) {
+        case "Synced":
+          return { icon: Circle_check, class: "text-green-400" };
+        case "NeedsSync":
+          return { icon: Triangle_alert, class: "text-amber-400" };
+        case "Orphan":
+          return { icon: Trash_2, class: "text-red-400" };
+        case "ActindoOnly":
+          return { icon: Info, class: "text-blue-400" };
+        case "NavOnly":
+          return { icon: Circle_x, class: "text-gray-400" };
+        default:
+          return { icon: Info, class: "text-gray-400" };
+      }
+    }
+    function getPresenceIcon(present) {
+      return present ? { icon: Circle_check, class: "text-green-400" } : { icon: Circle_x, class: "text-gray-500" };
+    }
     head("pillow", $$renderer2, ($$renderer3) => {
       $$renderer3.title(($$renderer4) => {
         $$renderer4.push(`<title>Sync Status | Actindo Middleware</title>`);
@@ -423,29 +534,29 @@ function _page($$renderer, $$props) {
         Button($$renderer3, {
           variant: "ghost",
           onclick: () => syncStore.refresh(),
-          disabled: state.loading,
+          disabled: syncState.loading,
           children: ($$renderer4) => {
-            Refresh_cw($$renderer4, { size: 16, class: state.loading ? "animate-spin" : "" });
+            Refresh_cw($$renderer4, { size: 16, class: syncState.loading ? "animate-spin" : "" });
             $$renderer4.push(`<!----> Aktualisieren`);
           }
         });
       };
       PageHeader($$renderer2, {
         title: "Sync Status",
-        subtitle: "NAV und Actindo ID Synchronisation",
+        subtitle: "3-Wege-Vergleich: Actindo, NAV und Middleware",
         actions
       });
     }
     $$renderer2.push(`<!----> `);
-    if (state.error) {
+    if (syncState.error) {
       $$renderer2.push("<!--[-->");
       Alert($$renderer2, {
         variant: "error",
         class: "mb-6",
         dismissible: true,
-        ondismiss: () => state.error = null,
+        ondismiss: () => syncState.error = null,
         children: ($$renderer3) => {
-          $$renderer3.push(`<!---->${escape_html(state.error)}`);
+          $$renderer3.push(`<!---->${escape_html(syncState.error)}`);
         }
       });
     } else {
@@ -467,7 +578,7 @@ function _page($$renderer, $$props) {
       $$renderer2.push("<!--[!-->");
     }
     $$renderer2.push(`<!--]--> `);
-    if (state.configured === false) {
+    if (syncState.configured === false) {
       $$renderer2.push("<!--[-->");
       Card($$renderer2, {
         children: ($$renderer3) => {
@@ -485,103 +596,135 @@ function _page($$renderer, $$props) {
       });
     } else {
       $$renderer2.push("<!--[!-->");
-      if (state.configured === null) {
+      if (syncState.configured === null) {
         $$renderer2.push("<!--[-->");
         $$renderer2.push(`<div class="flex justify-center py-12">`);
         Spinner($$renderer2, { size: "large" });
         $$renderer2.push(`<!----></div>`);
       } else {
         $$renderer2.push("<!--[!-->");
-        $$renderer2.push(`<div class="flex gap-2 mb-6"><button type="button"${attr_class(`px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-2 ${stringify(state.tab === "products" ? "bg-royal-600 text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white")}`)}>`);
+        $$renderer2.push(`<div class="flex gap-2 mb-6"><button type="button"${attr_class(`px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-2 ${stringify(syncState.tab === "products" ? "bg-royal-600 text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white")}`)}>`);
         Package($$renderer2, { size: 18 });
         $$renderer2.push(`<!----> Produkte `);
-        if (state.products) {
+        if (syncState.products) {
           $$renderer2.push("<!--[-->");
-          Badge($$renderer2, {
-            variant: state.products.needsSync > 0 ? "warning" : "success",
-            children: ($$renderer3) => {
-              $$renderer3.push(`<!---->${escape_html(state.products.needsSync)}`);
-            }
-          });
+          if (syncState.products.needsSync > 0) {
+            $$renderer2.push("<!--[-->");
+            Badge($$renderer2, {
+              variant: "warning",
+              children: ($$renderer3) => {
+                $$renderer3.push(`<!---->${escape_html(syncState.products.needsSync)}`);
+              }
+            });
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]--> `);
+          if (syncState.products.orphaned > 0) {
+            $$renderer2.push("<!--[-->");
+            Badge($$renderer2, {
+              variant: "error",
+              children: ($$renderer3) => {
+                $$renderer3.push(`<!---->${escape_html(syncState.products.orphaned)}`);
+              }
+            });
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]-->`);
         } else {
           $$renderer2.push("<!--[!-->");
         }
-        $$renderer2.push(`<!--]--></button> <button type="button"${attr_class(`px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-2 ${stringify(state.tab === "customers" ? "bg-royal-600 text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white")}`)}>`);
+        $$renderer2.push(`<!--]--></button> <button type="button"${attr_class(`px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-2 ${stringify(syncState.tab === "customers" ? "bg-royal-600 text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white")}`)}>`);
         Users($$renderer2, { size: 18 });
         $$renderer2.push(`<!----> Kunden `);
-        if (state.customers) {
+        if (syncState.customers) {
           $$renderer2.push("<!--[-->");
           Badge($$renderer2, {
-            variant: state.customers.needsSync > 0 ? "warning" : "success",
+            variant: syncState.customers.needsSync > 0 ? "warning" : "success",
             children: ($$renderer3) => {
-              $$renderer3.push(`<!---->${escape_html(state.customers.needsSync)}`);
+              $$renderer3.push(`<!---->${escape_html(syncState.customers.needsSync)}`);
             }
           });
         } else {
           $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--></button></div> `);
-        if (state.tab === "products" && state.products) {
+        if (syncState.tab === "products" && syncState.products) {
           $$renderer2.push("<!--[-->");
-          $$renderer2.push(`<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">`);
+          $$renderer2.push(`<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">`);
           Card($$renderer2, {
             class: "text-center",
             children: ($$renderer3) => {
-              $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(state.products.totalInMiddleware)}</p> <p class="text-sm text-gray-400">In Middleware</p>`);
+              $$renderer3.push(`<p class="text-3xl font-bold text-blue-400">${escape_html(syncState.products.totalInActindo)}</p> <p class="text-sm text-gray-400">In Actindo</p>`);
             }
           });
           $$renderer2.push(`<!----> `);
           Card($$renderer2, {
             class: "text-center",
             children: ($$renderer3) => {
-              $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(state.products.totalInNav)}</p> <p class="text-sm text-gray-400">In NAV</p>`);
+              $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(syncState.products.totalInNav)}</p> <p class="text-sm text-gray-400">In NAV</p>`);
             }
           });
           $$renderer2.push(`<!----> `);
           Card($$renderer2, {
             class: "text-center",
             children: ($$renderer3) => {
-              $$renderer3.push(`<p class="text-3xl font-bold text-green-400">${escape_html(state.products.synced)}</p> <p class="text-sm text-gray-400">Synchronisiert</p>`);
+              $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(syncState.products.totalInMiddleware)}</p> <p class="text-sm text-gray-400">In Middleware</p>`);
             }
           });
           $$renderer2.push(`<!----> `);
           Card($$renderer2, {
             class: "text-center",
             children: ($$renderer3) => {
-              $$renderer3.push(`<p class="text-3xl font-bold text-amber-400">${escape_html(state.products.needsSync)}</p> <p class="text-sm text-gray-400">Ausstehend</p>`);
+              $$renderer3.push(`<p class="text-3xl font-bold text-green-400">${escape_html(syncState.products.synced)}</p> <p class="text-sm text-gray-400">Synchronisiert</p>`);
+            }
+          });
+          $$renderer2.push(`<!----> `);
+          Card($$renderer2, {
+            class: "text-center",
+            children: ($$renderer3) => {
+              $$renderer3.push(`<p class="text-3xl font-bold text-amber-400">${escape_html(syncState.products.needsSync)}</p> <p class="text-sm text-gray-400">Sync fehlt</p>`);
+            }
+          });
+          $$renderer2.push(`<!----> `);
+          Card($$renderer2, {
+            class: "text-center",
+            children: ($$renderer3) => {
+              $$renderer3.push(`<p class="text-3xl font-bold text-red-400">${escape_html(syncState.products.orphaned)}</p> <p class="text-sm text-gray-400">Verwaist</p>`);
             }
           });
           $$renderer2.push(`<!----></div>`);
         } else {
           $$renderer2.push("<!--[!-->");
-          if (state.tab === "customers" && state.customers) {
+          if (syncState.tab === "customers" && syncState.customers) {
             $$renderer2.push("<!--[-->");
             $$renderer2.push(`<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">`);
             Card($$renderer2, {
               class: "text-center",
               children: ($$renderer3) => {
-                $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(state.customers.totalInMiddleware)}</p> <p class="text-sm text-gray-400">In Middleware</p>`);
+                $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(syncState.customers.totalInMiddleware)}</p> <p class="text-sm text-gray-400">In Middleware</p>`);
               }
             });
             $$renderer2.push(`<!----> `);
             Card($$renderer2, {
               class: "text-center",
               children: ($$renderer3) => {
-                $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(state.customers.totalInNav)}</p> <p class="text-sm text-gray-400">In NAV</p>`);
+                $$renderer3.push(`<p class="text-3xl font-bold">${escape_html(syncState.customers.totalInNav)}</p> <p class="text-sm text-gray-400">In NAV</p>`);
               }
             });
             $$renderer2.push(`<!----> `);
             Card($$renderer2, {
               class: "text-center",
               children: ($$renderer3) => {
-                $$renderer3.push(`<p class="text-3xl font-bold text-green-400">${escape_html(state.customers.synced)}</p> <p class="text-sm text-gray-400">Synchronisiert</p>`);
+                $$renderer3.push(`<p class="text-3xl font-bold text-green-400">${escape_html(syncState.customers.synced)}</p> <p class="text-sm text-gray-400">Synchronisiert</p>`);
               }
             });
             $$renderer2.push(`<!----> `);
             Card($$renderer2, {
               class: "text-center",
               children: ($$renderer3) => {
-                $$renderer3.push(`<p class="text-3xl font-bold text-amber-400">${escape_html(state.customers.needsSync)}</p> <p class="text-sm text-gray-400">Ausstehend</p>`);
+                $$renderer3.push(`<p class="text-3xl font-bold text-amber-400">${escape_html(syncState.customers.needsSync)}</p> <p class="text-sm text-gray-400">Ausstehend</p>`);
               }
             });
             $$renderer2.push(`<!----></div>`);
@@ -589,6 +732,20 @@ function _page($$renderer, $$props) {
             $$renderer2.push("<!--[!-->");
           }
           $$renderer2.push(`<!--]-->`);
+        }
+        $$renderer2.push(`<!--]--> `);
+        if (syncState.tab === "products" && orphanCount > 0) {
+          $$renderer2.push("<!--[-->");
+          Alert($$renderer2, {
+            variant: "warning",
+            class: "mb-6",
+            children: ($$renderer3) => {
+              $$renderer3.push(`<strong>Achtung:</strong> ${escape_html(orphanCount)} Produkt(e) existieren in NAV/Middleware aber nicht mehr in Actindo.
+			Diese Actindo-IDs sollten in NAV bereinigt werden.`);
+            }
+          });
+        } else {
+          $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--> `);
         if (needsSyncCount > 0) {
@@ -614,10 +771,10 @@ function _page($$renderer, $$props) {
             $$renderer2.push(`<!----> `);
             Button($$renderer2, {
               onclick: handleSyncSelected,
-              disabled: state.syncing,
+              disabled: syncState.syncing,
               children: ($$renderer3) => {
                 Arrow_right_left($$renderer3, { size: 16 });
-                $$renderer3.push(`<!----> ${escape_html(state.syncing ? "Synchronisiere..." : `Auswahl synchronisieren (${selectedCount})`)}`);
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : `Auswahl synchronisieren (${selectedCount})`)}`);
               }
             });
             $$renderer2.push(`<!---->`);
@@ -628,10 +785,10 @@ function _page($$renderer, $$props) {
           Button($$renderer2, {
             variant: "primary",
             onclick: handleSyncAll,
-            disabled: state.syncing,
+            disabled: syncState.syncing,
             children: ($$renderer3) => {
               Arrow_right_left($$renderer3, { size: 16 });
-              $$renderer3.push(`<!----> ${escape_html(state.syncing ? "Synchronisiere..." : "Alle synchronisieren")}`);
+              $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : "Alle synchronisieren")}`);
             }
           });
           $$renderer2.push(`<!----></div>`);
@@ -639,57 +796,162 @@ function _page($$renderer, $$props) {
           $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--> `);
-        if (state.tab === "products") {
+        if (syncState.tab === "products") {
           $$renderer2.push("<!--[-->");
-          if (state.loading && !state.products) {
+          if (syncState.loading && !syncState.products) {
             $$renderer2.push("<!--[-->");
             $$renderer2.push(`<div class="flex justify-center py-12">`);
             Spinner($$renderer2, {});
             $$renderer2.push(`<!----></div>`);
           } else {
             $$renderer2.push("<!--[!-->");
-            if (state.products && state.products.items.length > 0) {
+            if (syncState.products && syncState.products.items.length > 0) {
               $$renderer2.push("<!--[-->");
+              if (syncState.products.items.some((p) => p.variantStatus === "master" && p.variants.length > 0)) {
+                $$renderer2.push("<!--[-->");
+                $$renderer2.push(`<div class="flex gap-2 mb-4">`);
+                Button($$renderer2, {
+                  variant: "ghost",
+                  size: "small",
+                  onclick: () => syncStore.expandAllProducts(),
+                  children: ($$renderer3) => {
+                    Chevron_down($$renderer3, { size: 14 });
+                    $$renderer3.push(`<!----> Alle aufklappen`);
+                  }
+                });
+                $$renderer2.push(`<!----> `);
+                Button($$renderer2, {
+                  variant: "ghost",
+                  size: "small",
+                  onclick: () => syncStore.collapseAllProducts(),
+                  children: ($$renderer3) => {
+                    Chevron_right($$renderer3, { size: 14 });
+                    $$renderer3.push(`<!----> Alle zuklappen`);
+                  }
+                });
+                $$renderer2.push(`<!----></div>`);
+              } else {
+                $$renderer2.push("<!--[!-->");
+              }
+              $$renderer2.push(`<!--]--> `);
               Card($$renderer2, {
                 children: ($$renderer3) => {
-                  $$renderer3.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10 text-left text-sm text-gray-400"><th class="pb-3 pr-4 w-10"></th><th class="pb-3 pr-4">SKU</th><th class="pb-3 pr-4">Name</th><th class="pb-3 pr-4">Typ</th><th class="pb-3 pr-4 text-right">Middleware ID</th><th class="pb-3 pr-4 text-right">NAV ID</th><th class="pb-3 text-right">NAV Actindo ID</th><th class="pb-3 text-center">Status</th></tr></thead><tbody><!--[-->`);
-                  const each_array = ensure_array_like(state.products.items);
-                  for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
-                    let product = each_array[$$index];
-                    $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors ${stringify(product.needsSync ? "bg-amber-500/5" : "")}`)}><td class="py-3 pr-4">`);
-                    if (product.needsSync) {
+                  $$renderer3.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10 text-left text-sm text-gray-400"><th class="pb-3 pr-2 w-8"></th><th class="pb-3 pr-4 w-10"></th><th class="pb-3 pr-4">SKU</th><th class="pb-3 pr-4">Name</th><th class="pb-3 pr-4">Typ</th><th class="pb-3 pr-2 text-center" title="In Actindo">Act</th><th class="pb-3 pr-2 text-center" title="In NAV">NAV</th><th class="pb-3 pr-2 text-center" title="In Middleware">MW</th><th class="pb-3 pr-4 text-right">Actindo ID</th><th class="pb-3 pr-4 text-right">NAV Actindo ID</th><th class="pb-3 text-center">Status</th></tr></thead><tbody><!--[-->`);
+                  const each_array = ensure_array_like(syncState.products.items);
+                  for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
+                    let product = each_array[$$index_1];
+                    const hasVariants = product.variantStatus === "master" && product.variants.length > 0;
+                    const isExpanded = syncState.expandedProducts.has(product.sku);
+                    const statusBadge = getStatusBadge(product.status);
+                    getStatusIcon(product.status);
+                    const actindoPresence = getPresenceIcon(product.inActindo);
+                    const navPresence = getPresenceIcon(product.inNav);
+                    const mwPresence = getPresenceIcon(product.inMiddleware);
+                    $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors ${stringify(product.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(product.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-3 pr-2">`);
+                    if (hasVariants) {
                       $$renderer3.push("<!--[-->");
-                      $$renderer3.push(`<input type="checkbox"${attr("checked", state.selectedProductSkus.has(product.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
+                      $$renderer3.push(`<button type="button" class="p-1 hover:bg-white/10 rounded">`);
+                      if (isExpanded) {
+                        $$renderer3.push("<!--[-->");
+                        Chevron_down($$renderer3, { size: 16, class: "text-gray-400" });
+                      } else {
+                        $$renderer3.push("<!--[!-->");
+                        Chevron_right($$renderer3, { size: 16, class: "text-gray-400" });
+                      }
+                      $$renderer3.push(`<!--]--></button>`);
                     } else {
                       $$renderer3.push("<!--[!-->");
                     }
-                    $$renderer3.push(`<!--]--></td><td class="py-3 pr-4 font-mono text-sm">${escape_html(product.sku)}</td><td class="py-3 pr-4 truncate max-w-48">${escape_html(product.name || "-")}</td><td class="py-3 pr-4">`);
+                    $$renderer3.push(`<!--]--></td><td class="py-3 pr-4">`);
+                    if (product.status === "NeedsSync") {
+                      $$renderer3.push("<!--[-->");
+                      $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedProductSkus.has(product.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
+                    } else {
+                      $$renderer3.push("<!--[!-->");
+                    }
+                    $$renderer3.push(`<!--]--></td><td class="py-3 pr-4 font-mono text-sm">${escape_html(product.sku)} `);
+                    if (hasVariants) {
+                      $$renderer3.push("<!--[-->");
+                      $$renderer3.push(`<span class="text-gray-500 ml-1">(${escape_html(product.variants.length)})</span>`);
+                    } else {
+                      $$renderer3.push("<!--[!-->");
+                    }
+                    $$renderer3.push(`<!--]--></td><td class="py-3 pr-4 truncate max-w-48">${escape_html(product.name || "-")}</td><td class="py-3 pr-4">`);
                     Badge($$renderer3, {
                       variant: product.variantStatus === "master" ? "info" : product.variantStatus === "child" ? "secondary" : "default",
                       children: ($$renderer4) => {
-                        $$renderer4.push(`<!---->${escape_html(product.variantStatus)}`);
+                        $$renderer4.push(`<!---->${escape_html(product.variantStatus === "single" ? "Single" : product.variantStatus)}`);
                       }
                     });
-                    $$renderer3.push(`<!----></td><td class="py-3 pr-4 text-right font-mono text-sm">${escape_html(product.middlewareActindoId ?? "-")}</td><td class="py-3 pr-4 text-right font-mono text-sm">${escape_html(product.navNavId ?? "-")}</td><td class="py-3 text-right font-mono text-sm">${escape_html(product.navActindoId ?? "-")}</td><td class="py-3 text-center">`);
-                    if (product.needsSync) {
+                    $$renderer3.push(`<!----></td><td class="py-3 pr-2 text-center"><!---->`);
+                    actindoPresence.icon?.($$renderer3, {
+                      size: 16,
+                      class: `inline ${stringify(actindoPresence.class)}`
+                    });
+                    $$renderer3.push(`<!----></td><td class="py-3 pr-2 text-center"><!---->`);
+                    navPresence.icon?.($$renderer3, { size: 16, class: `inline ${stringify(navPresence.class)}` });
+                    $$renderer3.push(`<!----></td><td class="py-3 pr-2 text-center"><!---->`);
+                    mwPresence.icon?.($$renderer3, { size: 16, class: `inline ${stringify(mwPresence.class)}` });
+                    $$renderer3.push(`<!----></td><td class="py-3 pr-4 text-right font-mono text-sm">${escape_html(product.actindoId ?? product.middlewareActindoId ?? "-")}</td><td class="py-3 pr-4 text-right font-mono text-sm">${escape_html(product.navActindoId ?? "-")}</td><td class="py-3 text-center">`);
+                    Badge($$renderer3, {
+                      variant: statusBadge.variant,
+                      children: ($$renderer4) => {
+                        $$renderer4.push(`<!---->${escape_html(statusBadge.label)}`);
+                      }
+                    });
+                    $$renderer3.push(`<!----></td></tr> `);
+                    if (hasVariants && isExpanded) {
                       $$renderer3.push("<!--[-->");
-                      Triangle_alert($$renderer3, { size: 18, class: "inline text-amber-400" });
-                    } else {
-                      $$renderer3.push("<!--[!-->");
-                      if (product.middlewareActindoId && product.navActindoId) {
-                        $$renderer3.push("<!--[-->");
-                        Circle_check($$renderer3, { size: 18, class: "inline text-green-400" });
-                      } else {
-                        $$renderer3.push("<!--[!-->");
-                        Circle_x($$renderer3, { size: 18, class: "inline text-gray-500" });
+                      $$renderer3.push(`<!--[-->`);
+                      const each_array_1 = ensure_array_like(product.variants);
+                      for (let $$index = 0, $$length2 = each_array_1.length; $$index < $$length2; $$index++) {
+                        let variant = each_array_1[$$index];
+                        const vStatusBadge = getStatusBadge(variant.status);
+                        const vActindoPresence = getPresenceIcon(variant.inActindo);
+                        const vNavPresence = getPresenceIcon(variant.inNav);
+                        const vMwPresence = getPresenceIcon(variant.inMiddleware);
+                        $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors bg-white/[0.02] ${stringify(variant.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(variant.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-2 pr-2"></td><td class="py-2 pr-4">`);
+                        if (variant.status === "NeedsSync") {
+                          $$renderer3.push("<!--[-->");
+                          $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedProductSkus.has(variant.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
+                        } else {
+                          $$renderer3.push("<!--[!-->");
+                        }
+                        $$renderer3.push(`<!--]--></td><td class="py-2 pr-4 font-mono text-sm pl-6 text-gray-400">${escape_html(variant.sku)}</td><td class="py-2 pr-4 truncate max-w-48 text-gray-400 text-sm">${escape_html(variant.variantCode || variant.name || "-")}</td><td class="py-2 pr-4">`);
+                        Badge($$renderer3, {
+                          variant: "secondary",
+                          children: ($$renderer4) => {
+                            $$renderer4.push(`<!---->child`);
+                          }
+                        });
+                        $$renderer3.push(`<!----></td><td class="py-2 pr-2 text-center"><!---->`);
+                        vActindoPresence.icon?.($$renderer3, {
+                          size: 14,
+                          class: `inline ${stringify(vActindoPresence.class)}`
+                        });
+                        $$renderer3.push(`<!----></td><td class="py-2 pr-2 text-center"><!---->`);
+                        vNavPresence.icon?.($$renderer3, { size: 14, class: `inline ${stringify(vNavPresence.class)}` });
+                        $$renderer3.push(`<!----></td><td class="py-2 pr-2 text-center"><!---->`);
+                        vMwPresence.icon?.($$renderer3, { size: 14, class: `inline ${stringify(vMwPresence.class)}` });
+                        $$renderer3.push(`<!----></td><td class="py-2 pr-4 text-right font-mono text-sm text-gray-400">${escape_html(variant.actindoId ?? variant.middlewareActindoId ?? "-")}</td><td class="py-2 pr-4 text-right font-mono text-sm text-gray-400">${escape_html(variant.navActindoId ?? "-")}</td><td class="py-2 text-center">`);
+                        Badge($$renderer3, {
+                          variant: vStatusBadge.variant,
+                          children: ($$renderer4) => {
+                            $$renderer4.push(`<!---->${escape_html(vStatusBadge.label)}`);
+                          }
+                        });
+                        $$renderer3.push(`<!----></td></tr>`);
                       }
                       $$renderer3.push(`<!--]-->`);
+                    } else {
+                      $$renderer3.push("<!--[!-->");
                     }
-                    $$renderer3.push(`<!--]--></td></tr>`);
+                    $$renderer3.push(`<!--]-->`);
                   }
                   $$renderer3.push(`<!--]--></tbody></table></div>`);
                 }
               });
+              $$renderer2.push(`<!---->`);
             } else {
               $$renderer2.push("<!--[!-->");
               Card($$renderer2, {
@@ -707,27 +969,27 @@ function _page($$renderer, $$props) {
           $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--> `);
-        if (state.tab === "customers") {
+        if (syncState.tab === "customers") {
           $$renderer2.push("<!--[-->");
-          if (state.loading && !state.customers) {
+          if (syncState.loading && !syncState.customers) {
             $$renderer2.push("<!--[-->");
             $$renderer2.push(`<div class="flex justify-center py-12">`);
             Spinner($$renderer2, {});
             $$renderer2.push(`<!----></div>`);
           } else {
             $$renderer2.push("<!--[!-->");
-            if (state.customers && state.customers.items.length > 0) {
+            if (syncState.customers && syncState.customers.items.length > 0) {
               $$renderer2.push("<!--[-->");
               Card($$renderer2, {
                 children: ($$renderer3) => {
                   $$renderer3.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10 text-left text-sm text-gray-400"><th class="pb-3 pr-4 w-10"></th><th class="pb-3 pr-4">Debitorennr.</th><th class="pb-3 pr-4">Name</th><th class="pb-3 pr-4 text-right">Middleware ID</th><th class="pb-3 pr-4 text-right">NAV ID</th><th class="pb-3 text-right">NAV Actindo ID</th><th class="pb-3 text-center">Status</th></tr></thead><tbody><!--[-->`);
-                  const each_array_1 = ensure_array_like(state.customers.items);
-                  for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
-                    let customer = each_array_1[$$index_1];
+                  const each_array_2 = ensure_array_like(syncState.customers.items);
+                  for (let $$index_2 = 0, $$length = each_array_2.length; $$index_2 < $$length; $$index_2++) {
+                    let customer = each_array_2[$$index_2];
                     $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors ${stringify(customer.needsSync ? "bg-amber-500/5" : "")}`)}><td class="py-3 pr-4">`);
                     if (customer.needsSync) {
                       $$renderer3.push("<!--[-->");
-                      $$renderer3.push(`<input type="checkbox"${attr("checked", state.selectedCustomerIds.has(customer.debtorNumber), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
+                      $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedCustomerIds.has(customer.debtorNumber), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
                     } else {
                       $$renderer3.push("<!--[!-->");
                     }

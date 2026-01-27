@@ -17,7 +17,8 @@ namespace ActindoMiddleware.Controllers;
 [Authorize(Policy = AuthPolicies.Read)]
 public sealed class DashboardController : ControllerBase
 {
-    private static readonly TimeSpan SummaryWindow = TimeSpan.FromHours(24);
+    // Use a very large window to show "all-time" statistics instead of just last 24h
+    private static readonly TimeSpan SummaryWindow = TimeSpan.FromDays(365 * 100);
     private readonly IDashboardMetricsService _metricsService;
     private readonly IAuthenticationService _authenticationService;
     private readonly IJobReplayService _jobReplayService;

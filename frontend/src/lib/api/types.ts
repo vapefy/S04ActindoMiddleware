@@ -164,14 +164,35 @@ export interface ActindoSettings {
 }
 
 // Sync Types
+export type SyncStatus = 'Synced' | 'NeedsSync' | 'Orphan' | 'ActindoOnly' | 'NavOnly';
+
+export interface ProductVariantSyncItem {
+	sku: string;
+	variantCode: string;
+	name: string;
+	actindoId: string | null;
+	navActindoId: string | null;
+	middlewareActindoId: string | null;
+	inActindo: boolean;
+	inNav: boolean;
+	inMiddleware: boolean;
+	status: SyncStatus;
+}
+
 export interface ProductSyncItem {
 	sku: string;
 	name: string;
-	middlewareActindoId: number | null;
-	navNavId: number | null;
-	navActindoId: number | null;
-	needsSync: boolean;
 	variantStatus: VariantStatus;
+	actindoId: string | null;
+	navActindoId: string | null;
+	middlewareActindoId: string | null;
+	inActindo: boolean;
+	inNav: boolean;
+	inMiddleware: boolean;
+	status: SyncStatus;
+	needsSync: boolean;
+	isOrphan: boolean;
+	variants: ProductVariantSyncItem[];
 }
 
 export interface CustomerSyncItem {
@@ -184,10 +205,12 @@ export interface CustomerSyncItem {
 }
 
 export interface ProductSyncStatus {
-	totalInMiddleware: number;
+	totalInActindo: number;
 	totalInNav: number;
+	totalInMiddleware: number;
 	synced: number;
 	needsSync: number;
+	orphaned: number;
 	items: ProductSyncItem[];
 }
 

@@ -1,4 +1,4 @@
-import { s as sanitize_props, a as spread_props, b as slot, h as head, g as ensure_array_like, d as attr, c as attr_class, e as stringify } from "../../../chunks/index2.js";
+import { h as head, e as ensure_array_like, d as attr, f as attr_class, g as stringify } from "../../../chunks/index2.js";
 import { p as products } from "../../../chunks/client2.js";
 import { a as formatDate } from "../../../chunks/format.js";
 import { P as PageHeader, R as Refresh_cw } from "../../../chunks/PageHeader.js";
@@ -7,45 +7,11 @@ import { B as Button } from "../../../chunks/Button.js";
 import { I as Input } from "../../../chunks/Input.js";
 import { B as Badge } from "../../../chunks/Badge.js";
 import { A as Alert } from "../../../chunks/Alert.js";
-import { I as Icon, S as Spinner } from "../../../chunks/Spinner.js";
+import { S as Spinner } from "../../../chunks/Spinner.js";
 import { S as Search } from "../../../chunks/search.js";
-import { P as Package } from "../../../chunks/package.js";
+import { P as Package, C as Chevron_down } from "../../../chunks/package.js";
 import { C as Chevron_right } from "../../../chunks/chevron-right.js";
 import { $ as escape_html } from "../../../chunks/context.js";
-function Chevron_down($$renderer, $$props) {
-  const $$sanitized_props = sanitize_props($$props);
-  /**
-   * @license lucide-svelte v0.460.1 - ISC
-   *
-   * This source code is licensed under the ISC license.
-   * See the LICENSE file in the root directory of this source tree.
-   */
-  const iconNode = [["path", { "d": "m6 9 6 6 6-6" }]];
-  Icon($$renderer, spread_props([
-    { name: "chevron-down" },
-    $$sanitized_props,
-    {
-      /**
-       * @component @name ChevronDown
-       * @description Lucide SVG icon component, renders SVG Element with children.
-       *
-       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJtNiA5IDYgNiA2LTYiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/chevron-down
-       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-       *
-       * @param {Object} props - Lucide icons props and any valid SVG attribute
-       * @returns {FunctionalComponent} Svelte component
-       *
-       */
-      iconNode,
-      children: ($$renderer2) => {
-        $$renderer2.push(`<!--[-->`);
-        slot($$renderer2, $$props, "default", {});
-        $$renderer2.push(`<!--]-->`);
-      },
-      $$slots: { default: true }
-    }
-  ]));
-}
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     function formatPrice(price) {
@@ -243,7 +209,7 @@ function _page($$renderer, $$props) {
                 $$renderer4.push(`<!--]--></td><td class="py-3 px-4 text-right">`);
                 if (product.lastStock !== null) {
                   $$renderer4.push("<!--[-->");
-                  $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(product.lastStock > 0 ? "text-blue-400" : "text-red-400")} hover:underline cursor-pointer`)}>${escape_html(product.lastStock)}</button>`);
+                  $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(product.lastStock > 0 ? "text-blue-400" : "text-red-400")} underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer`)}>${escape_html(product.lastStock)}</button>`);
                 } else {
                   $$renderer4.push("<!--[!-->");
                   $$renderer4.push(`<span class="text-gray-500">-</span>`);
@@ -295,7 +261,7 @@ function _page($$renderer, $$props) {
                     $$renderer4.push(`<!--]--></td><td class="py-2 px-4 text-right">`);
                     if (variant.lastStock !== null) {
                       $$renderer4.push("<!--[-->");
-                      $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(variant.lastStock > 0 ? "text-blue-400" : "text-red-400")} hover:underline cursor-pointer`)}>${escape_html(variant.lastStock)}</button>`);
+                      $$renderer4.push(`<button type="button"${attr_class(`font-mono text-sm ${stringify(variant.lastStock > 0 ? "text-blue-400" : "text-red-400")} underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer`)}>${escape_html(variant.lastStock)}</button>`);
                     } else {
                       $$renderer4.push("<!--[!-->");
                       $$renderer4.push(`<span class="text-gray-500">-</span>`);

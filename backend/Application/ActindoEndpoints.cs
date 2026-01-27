@@ -40,4 +40,7 @@ public static class ActindoEndpoints
 
     public const string DELETE_PRODUCT =
         "https://schalke-dev.dev.actindo.com/Actindo.Modules.Actindo.PIM.Products.delete";
+
+    public const string GET_PRODUCT =
+        "https://schalke-dev.dev.actindo.com/Actindo.Modules.Actindo.PIM.Products.get";
 }

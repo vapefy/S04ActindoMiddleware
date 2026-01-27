@@ -56,6 +56,10 @@ const auth = {
   }),
   logout: () => request("/api/auth/logout", {
     method: "POST"
+  }),
+  changePassword: (data) => request("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(data)
   })
 };
 const dashboard = {

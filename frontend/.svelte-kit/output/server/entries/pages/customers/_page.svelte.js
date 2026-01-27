@@ -1,4 +1,4 @@
-import { h as head, g as ensure_array_like } from "../../../chunks/index2.js";
+import { h as head, e as ensure_array_like } from "../../../chunks/index2.js";
 import { c as customers } from "../../../chunks/client2.js";
 import { a as formatDate } from "../../../chunks/format.js";
 import { P as PageHeader, R as Refresh_cw } from "../../../chunks/PageHeader.js";

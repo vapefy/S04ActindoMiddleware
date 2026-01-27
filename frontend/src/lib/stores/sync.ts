@@ -14,6 +14,7 @@ interface SyncState {
 	error: string | null;
 	selectedProductSkus: Set<string>;
 	selectedCustomerIds: Set<string>;
+	expandedProducts: Set<string>;
 }
 
 function createSyncStore() {
@@ -26,7 +27,8 @@ function createSyncStore() {
 		syncing: false,
 		error: null,
 		selectedProductSkus: new Set(),
-		selectedCustomerIds: new Set()
+		selectedCustomerIds: new Set(),
+		expandedProducts: new Set()
 	});
 
 	let currentState: SyncState;
@@ -58,7 +60,8 @@ function createSyncStore() {
 					...s,
 					products,
 					loading: false,
-					selectedProductSkus: new Set()
+					selectedProductSkus: new Set(),
+					expandedProducts: new Set()
 				}));
 			} catch (e) {
 				update((s) => ({
@@ -113,17 +116,55 @@ function createSyncStore() {
 			update((s) => {
 				if (!s.products) return s;
 				const items = needsSyncOnly
-					? s.products.items.filter((p) => p.needsSync)
+					? s.products.items.filter((p) => p.needsSync || p.status === 'NeedsSync')
 					: s.products.items;
+				// Also collect variants that need sync
+				const skus: string[] = [];
+				for (const item of items) {
+					skus.push(item.sku);
+					if (item.variants) {
+						for (const v of item.variants) {
+							if (!needsSyncOnly || v.status === 'NeedsSync') {
+								skus.push(v.sku);
+							}
+						}
+					}
+				}
 				return {
 					...s,
-					selectedProductSkus: new Set(items.map((p) => p.sku))
+					selectedProductSkus: new Set(skus)
 				};
 			});
 		},
 
 		clearProductSelection() {
 			update((s) => ({ ...s, selectedProductSkus: new Set() }));
+		},
+
+		toggleProductExpanded(sku: string) {
+			update((s) => {
+				const newSet = new Set(s.expandedProducts);
+				if (newSet.has(sku)) {
+					newSet.delete(sku);
+				} else {
+					newSet.add(sku);
+				}
+				return { ...s, expandedProducts: newSet };
+			});
+		},
+
+		expandAllProducts() {
+			update((s) => {
+				if (!s.products) return s;
+				const masters = s.products.items
+					.filter((p) => p.variantStatus === 'master' && p.variants.length > 0)
+					.map((p) => p.sku);
+				return { ...s, expandedProducts: new Set(masters) };
+			});
+		},
+
+		collapseAllProducts() {
+			update((s) => ({ ...s, expandedProducts: new Set() }));
 		},
 
 		toggleCustomerSelection(debtorNumber: string) {
@@ -260,7 +301,8 @@ function createSyncStore() {
 				syncing: false,
 				error: null,
 				selectedProductSkus: new Set(),
-				selectedCustomerIds: new Set()
+				selectedCustomerIds: new Set(),
+				expandedProducts: new Set()
 			});
 		}
 	};

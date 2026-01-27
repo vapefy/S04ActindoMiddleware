@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +23,30 @@ internal sealed record ActindoProductData(
     string VariantStatus,
     string? ParentSku,
     string? VariantCode,
-    string? CreatedAt);
+    string? CreatedAt,
+    string? Name);
+
+/// <summary>
+/// Record for simplified sync comparison - just ID and SKU.
+/// </summary>
+public sealed record ActindoSyncProduct(
+    int Id,
+    string Sku,
+    string Name,
+    string VariantStatus);
+
+/// <summary>
+/// Record for detailed product info including variants.
+/// </summary>
+public sealed record ActindoProductDetails
+{
+    public required int Id { get; init; }
+    public required string Sku { get; init; }
+    public required string Name { get; init; }
+    public required string VariantStatus { get; init; }
+    public IReadOnlyList<int> ChildrenIds { get; init; } = Array.Empty<int>();
+    public decimal? Price { get; init; }
+}
 
 public sealed class ActindoProductListService
 {
@@ -42,6 +66,120 @@ public sealed class ActindoProductListService
         _authService = authService;
         _endpoints = endpoints;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Gets a simple list of all products in Actindo for sync comparison.
+    /// Returns ID, SKU, Name, and VariantStatus.
+    /// </summary>
+    public async Task<IReadOnlyList<ActindoSyncProduct>> GetAllProductsForSyncAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var items = await FetchProductElementsAsync(cancellationToken);
+
+        return items
+            .Where(p => p.Id.HasValue)
+            .Select(p => new ActindoSyncProduct(
+                p.Id!.Value,
+                p.Sku,
+                p.Name ?? string.Empty,
+                p.VariantStatus))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets detailed product info including variant children IDs.
+    /// </summary>
+    public async Task<ActindoProductDetails?> GetProductDetailsAsync(
+        int actindoId,
+        CancellationToken cancellationToken = default)
+    {
+        var endpoints = await _endpoints.GetAsync(cancellationToken);
+        var endpoint = endpoints.GetProduct;
+        var token = await _authService.GetValidAccessTokenAsync(cancellationToken);
+
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var payload = new { product = new { id = actindoId } };
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(endpoint, payload, cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Actindo get product {Id} failed {Status}: {Content}",
+                    actindoId, (int)response.StatusCode, content);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            if (!doc.RootElement.TryGetProperty("data", out var data))
+                return null;
+
+            var id = TryReadInt(data, "id") ?? actindoId;
+            var sku = data.TryGetProperty("sku", out var skuProp) ? skuProp.GetString() ?? string.Empty : string.Empty;
+            var variantStatus = data.TryGetProperty("variantStatus", out var vsProp) ? vsProp.GetString() ?? "single" : "single";
+
+            // Get name from various possible fields
+            var name = GetFirstNonEmpty(data,
+                "_pim_art_name__actindo_basic__de_DE",
+                "_pim_art_name__actindo_basic__en_US");
+
+            // Get children IDs from _pim_variants
+            var childrenIds = new List<int>();
+            if (data.TryGetProperty("_pim_variants", out var variants) &&
+                variants.ValueKind == JsonValueKind.Object &&
+                variants.TryGetProperty("childrenIds", out var childrenObj) &&
+                childrenObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var child in childrenObj.EnumerateObject())
+                {
+                    if (child.Value.TryGetInt32(out var childId))
+                    {
+                        childrenIds.Add(childId);
+                    }
+                }
+            }
+
+            // Get price
+            decimal? price = null;
+            if (data.TryGetProperty("_pim_price", out var priceData) &&
+                priceData.ValueKind == JsonValueKind.Object &&
+                priceData.TryGetProperty("currencies", out var currencies) &&
+                currencies.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var currency in currencies.EnumerateArray())
+                {
+                    if (currency.TryGetProperty("basePrice", out var basePrice) &&
+                        basePrice.TryGetProperty("price", out var priceProp))
+                    {
+                        if (priceProp.TryGetDecimal(out var p))
+                            price = p;
+                        else if (priceProp.ValueKind == JsonValueKind.String &&
+                                 decimal.TryParse(priceProp.GetString(), out var parsed))
+                            price = parsed;
+                        break;
+                    }
+                }
+            }
+
+            return new ActindoProductDetails
+            {
+                Id = id,
+                Sku = sku,
+                Name = name,
+                VariantStatus = variantStatus,
+                ChildrenIds = childrenIds,
+                Price = price
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get product details for {ActindoId}", actindoId);
+            return null;
+        }
     }
 
     /// <summary>
@@ -87,7 +225,7 @@ public sealed class ActindoProductListService
                 JobId = Guid.Empty,
                 ProductId = item.Id,
                 Sku = item.Sku,
-                Name = string.Empty,
+                Name = item.Name ?? string.Empty,
                 VariantCount = variantCount,
                 CreatedAt = created,
                 VariantStatus = item.VariantStatus,
@@ -144,7 +282,7 @@ public sealed class ActindoProductListService
                 JobId = Guid.Empty,
                 ProductId = item.Id,
                 Sku = item.Sku,
-                Name = string.Empty,
+                Name = item.Name ?? string.Empty,
                 VariantCount = null,
                 CreatedAt = created,
                 VariantStatus = "child",
@@ -186,7 +324,8 @@ public sealed class ActindoProductListService
 
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+        // Actindo uses POST for getList (not GET)
+        using var response = await _httpClient.PostAsJsonAsync(endpoint, new { }, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -209,16 +348,15 @@ public sealed class ActindoProductListService
             var variantCode = item.TryGetProperty("_pim_varcode", out var vcProp) ? vcProp.GetString() : null;
             var createdAt = item.TryGetProperty("created", out var createdProp) ? createdProp.GetString() : null;
 
-            result.Add(new ActindoProductData(id, sku, variantStatus, parentSku, variantCode, createdAt));
+            // Name might not be in the list response, but we'll try
+            var name = GetFirstNonEmpty(item,
+                "_pim_art_name__actindo_basic__de_DE",
+                "_pim_art_name__actindo_basic__en_US");
+
+            result.Add(new ActindoProductData(id, sku, variantStatus, parentSku, variantCode, createdAt, name));
         }
 
-        // Debug: Log first few items to see structure
         _logger.LogInformation("Fetched {Count} products from Actindo", result.Count);
-        foreach (var item in result.Take(3))
-        {
-            _logger.LogInformation("  Product: sku={Sku}, variantStatus={Status}, parentSku={Parent}, varcode={Varcode}",
-                item.Sku, item.VariantStatus, item.ParentSku ?? "(no _pim_parent_sku)", item.VariantCode ?? "(no _pim_varcode)");
-        }
 
         return result;
     }
@@ -235,5 +373,21 @@ public sealed class ActindoProductListService
             return parsed;
 
         return null;
+    }
+
+    private static string GetFirstNonEmpty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var name in propertyNames)
+        {
+            if (element.TryGetProperty(name, out var value) &&
+                value.ValueKind == JsonValueKind.String)
+            {
+                var s = value.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
+                    return s;
+            }
+        }
+
+        return string.Empty;
     }
 }
