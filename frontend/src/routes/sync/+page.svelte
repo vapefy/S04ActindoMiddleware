@@ -16,7 +16,9 @@
 		Info,
 		Eye,
 		EyeOff,
-		CircleAlert
+		CircleAlert,
+		Eraser,
+		Zap
 	} from 'lucide-svelte';
 	import { syncStore, type SyncTab } from '$stores/sync';
 	import { permissions } from '$stores/auth';
@@ -106,6 +108,36 @@
 			syncStore.clearProductSelection();
 		} else {
 			syncStore.clearCustomerSelection();
+		}
+	}
+
+	async function handleClearIds() {
+		if (!confirm('Actindo-IDs der ausgewaehlten Produkte in NAV leeren?')) return;
+
+		try {
+			const result = await syncStore.clearSelectedProductIds();
+			if (result.message) {
+				successMessage = result.message;
+			} else {
+				successMessage = `Actindo-IDs von ${result.cleared} Produkt(en) geleert`;
+			}
+		} catch (e) {
+			// Error is handled in store
+		}
+	}
+
+	async function handleForceSync() {
+		if (!confirm('Actindo-IDs der ausgewaehlten Produkte in NAV ueberschreiben?')) return;
+
+		try {
+			const result = await syncStore.forceSyncSelectedProducts();
+			if (result.message) {
+				successMessage = result.message;
+			} else {
+				successMessage = `${result.synced} Produkt(e) synchronisiert`;
+			}
+		} catch (e) {
+			// Error is handled in store
 		}
 	}
 
@@ -328,7 +360,38 @@
 	{/if}
 
 	<!-- Action Buttons -->
-	{#if needsSyncCount > 0}
+	{#if syncState.tab === 'products' && (needsSyncCount > 0 || selectedCount > 0)}
+		<div class="flex flex-wrap gap-2 mb-6">
+			{#if needsSyncCount > 0}
+				<Button variant="ghost" onclick={handleSelectAllNeedsSync}>
+					Alle ausstehenden auswaehlen ({needsSyncCount})
+				</Button>
+			{/if}
+			{#if selectedCount > 0}
+				<Button variant="ghost" onclick={handleClearSelection}>
+					Auswahl aufheben ({selectedCount})
+				</Button>
+				<Button onclick={handleSyncSelected} disabled={syncState.syncing}>
+					<ArrowRightLeft size={16} />
+					{syncState.syncing ? 'Synchronisiere...' : `Sync zu NAV (${selectedCount})`}
+				</Button>
+				<Button variant="danger" onclick={handleClearIds} disabled={syncState.syncing}>
+					<Eraser size={16} />
+					{syncState.syncing ? 'Leere...' : 'Actindo ID leeren'}
+				</Button>
+				<Button variant="primary" onclick={handleForceSync} disabled={syncState.syncing}>
+					<Zap size={16} />
+					{syncState.syncing ? 'Synchronisiere...' : 'Actindo ID Sync'}
+				</Button>
+			{/if}
+			{#if needsSyncCount > 0}
+				<Button variant="ghost" onclick={handleSyncAll} disabled={syncState.syncing}>
+					<ArrowRightLeft size={16} />
+					{syncState.syncing ? 'Synchronisiere...' : 'Alle synchronisieren'}
+				</Button>
+			{/if}
+		</div>
+	{:else if syncState.tab === 'customers' && needsSyncCount > 0}
 		<div class="flex flex-wrap gap-2 mb-6">
 			<Button variant="ghost" onclick={handleSelectAllNeedsSync}>
 				Alle ausstehenden auswaehlen ({needsSyncCount})
@@ -437,7 +500,7 @@
 										{/if}
 									</td>
 									<td class="py-3 pr-4">
-										{#if product.status === 'NeedsSync'}
+										{#if product.inNav}
 											<input
 												type="checkbox"
 												checked={syncState.selectedProductSkus.has(product.sku)}
@@ -500,7 +563,7 @@
 										>
 											<td class="py-2 pr-2"></td>
 											<td class="py-2 pr-4">
-												{#if variant.status === 'NeedsSync'}
+												{#if variant.inNav}
 													<input
 														type="checkbox"
 														checked={syncState.selectedProductSkus.has(variant.sku)}

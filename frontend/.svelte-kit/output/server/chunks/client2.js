@@ -148,6 +148,14 @@ const sync = {
   }),
   syncAllCustomers: () => request("/api/sync/customers/all", {
     method: "POST"
+  }),
+  clearProductIds: (skus) => request("/api/sync/products/clear", {
+    method: "POST",
+    body: JSON.stringify({ skus })
+  }),
+  forceSyncProducts: (skus) => request("/api/sync/products/force", {
+    method: "POST",
+    body: JSON.stringify({ skus })
   })
 };
 export {

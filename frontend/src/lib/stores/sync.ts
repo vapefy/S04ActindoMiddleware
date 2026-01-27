@@ -289,6 +289,46 @@ function createSyncStore() {
 			}
 		},
 
+		async clearSelectedProductIds() {
+			if (currentState.selectedProductSkus.size === 0) return { cleared: 0 };
+
+			update((s) => ({ ...s, syncing: true, error: null }));
+			try {
+				const result = await syncApi.clearProductIds([...currentState.selectedProductSkus]);
+				// Reload products after clearing
+				await this.loadProducts();
+				update((s) => ({ ...s, syncing: false }));
+				return result;
+			} catch (e) {
+				update((s) => ({
+					...s,
+					syncing: false,
+					error: e instanceof Error ? e.message : 'Fehler beim Leeren der IDs'
+				}));
+				throw e;
+			}
+		},
+
+		async forceSyncSelectedProducts() {
+			if (currentState.selectedProductSkus.size === 0) return { synced: 0 };
+
+			update((s) => ({ ...s, syncing: true, error: null }));
+			try {
+				const result = await syncApi.forceSyncProducts([...currentState.selectedProductSkus]);
+				// Reload products after sync
+				await this.loadProducts();
+				update((s) => ({ ...s, syncing: false }));
+				return result;
+			} catch (e) {
+				update((s) => ({
+					...s,
+					syncing: false,
+					error: e instanceof Error ? e.message : 'Fehler beim Synchronisieren'
+				}));
+				throw e;
+			}
+		},
+
 		refresh() {
 			if (currentState.tab === 'products') {
 				this.loadProducts();

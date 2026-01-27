@@ -164,6 +164,46 @@ public sealed class NavClient : INavClient
         _logger.LogInformation("Set Actindo IDs for {Count} products in NAV", productsList.Count);
     }
 
+    public async Task ClearProductActindoIdsAsync(
+        IEnumerable<NavProductClearRequest> products,
+        CancellationToken cancellationToken = default)
+    {
+        var productsList = products.Select(p =>
+        {
+            if (p.VariantNavIds != null && p.VariantNavIds.Count > 0)
+            {
+                return new
+                {
+                    nav_id = p.NavId,
+                    actindo_id = (string?)null,
+                    variants = p.VariantNavIds.Select(v => new
+                    {
+                        nav_id = v,
+                        actindo_id = (string?)null
+                    }).ToArray()
+                };
+            }
+
+            return (object)new
+            {
+                nav_id = p.NavId,
+                actindo_id = (string?)null
+            };
+        }).ToList();
+
+        if (productsList.Count == 0)
+            return;
+
+        var payload = new
+        {
+            requestType = "actindo.product.id.set",
+            products = productsList
+        };
+
+        await PostAsync(payload, cancellationToken);
+        _logger.LogInformation("Cleared Actindo IDs for {Count} products in NAV", productsList.Count);
+    }
+
     private async Task<JsonElement> PostAsync(object payload, CancellationToken cancellationToken)
     {
         var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);

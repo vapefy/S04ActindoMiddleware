@@ -254,6 +254,18 @@ export const sync = {
 	syncAllCustomers: () =>
 		request<{ synced: number; errors?: string[] }>('/api/sync/customers/all', {
 			method: 'POST'
+		}),
+
+	clearProductIds: (skus: string[]) =>
+		request<{ cleared: number; message?: string }>('/api/sync/products/clear', {
+			method: 'POST',
+			body: JSON.stringify({ skus })
+		}),
+
+	forceSyncProducts: (skus: string[]) =>
+		request<{ synced: number; message?: string }>('/api/sync/products/force', {
+			method: 'POST',
+			body: JSON.stringify({ skus })
 		})
 };
 

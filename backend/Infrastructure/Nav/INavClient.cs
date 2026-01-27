@@ -50,6 +50,13 @@ public interface INavClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Clear Actindo IDs for multiple products in NAV (set to empty)
+    /// </summary>
+    Task ClearProductActindoIdsAsync(
+        IEnumerable<NavProductClearRequest> products,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Check if NAV API is configured
     /// </summary>
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
@@ -72,4 +79,13 @@ public sealed record NavVariantSyncRequest
 {
     public required string NavId { get; init; }
     public required string ActindoId { get; init; }
+}
+
+/// <summary>
+/// Request to clear Actindo ID for a product (with optional variants)
+/// </summary>
+public sealed record NavProductClearRequest
+{
+    public required string NavId { get; init; }
+    public IReadOnlyList<string>? VariantNavIds { get; init; }
 }

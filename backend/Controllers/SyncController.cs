@@ -887,4 +887,192 @@ public sealed class SyncController : ControllerBase
 
         return Ok(new { synced });
     }
+
+    /// <summary>
+    /// Clear Actindo IDs for selected products in NAV
+    /// </summary>
+    [HttpPost("products/clear")]
+    public async Task<ActionResult> ClearProductIds([FromBody] SyncProductsRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Skus.Count == 0)
+        {
+            return BadRequest(new { error = "No products specified" });
+        }
+
+        var configured = await _navClient.IsConfiguredAsync(cancellationToken);
+        if (!configured)
+        {
+            return BadRequest(new { error = "NAV API is not configured" });
+        }
+
+        // Get products from NAV to find variants
+        var navProducts = await _navClient.GetProductsAsync(cancellationToken);
+        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+
+        var toClear = new List<NavProductClearRequest>();
+
+        foreach (var sku in request.Skus)
+        {
+            if (!navBySku.TryGetValue(sku, out var navProduct))
+            {
+                _logger.LogWarning("Product {Sku} not found in NAV", sku);
+                continue;
+            }
+
+            // Collect variant codes
+            List<string>? variantNavIds = null;
+            if (navProduct.Variants.Count > 0)
+            {
+                variantNavIds = navProduct.Variants
+                    .Select(v =>
+                    {
+                        // Extract just the variant code (e.g., "L" from "1042-L")
+                        if (v.NavId.StartsWith(sku + "-", StringComparison.OrdinalIgnoreCase))
+                            return v.NavId[(sku.Length + 1)..];
+                        return v.NavId;
+                    })
+                    .ToList();
+            }
+
+            toClear.Add(new NavProductClearRequest
+            {
+                NavId = sku,
+                VariantNavIds = variantNavIds
+            });
+        }
+
+        if (toClear.Count == 0)
+        {
+            return Ok(new { cleared = 0, message = "No products found to clear" });
+        }
+
+        try
+        {
+            await _navClient.ClearProductActindoIdsAsync(toClear, cancellationToken);
+            _logger.LogInformation("Cleared Actindo IDs for {Count} products in NAV", toClear.Count);
+            return Ok(new { cleared = toClear.Count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear product IDs in NAV");
+            return StatusCode(502, new { error = "Failed to clear IDs in NAV API", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Force sync Actindo IDs to NAV (overwrite existing IDs)
+    /// </summary>
+    [HttpPost("products/force")]
+    public async Task<ActionResult> ForceSyncProducts([FromBody] SyncProductsRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Skus.Count == 0)
+        {
+            return BadRequest(new { error = "No products specified" });
+        }
+
+        var configured = await _navClient.IsConfiguredAsync(cancellationToken);
+        if (!configured)
+        {
+            return BadRequest(new { error = "NAV API is not configured" });
+        }
+
+        // Get products from all sources
+        var actindoProducts = await _actindoProductService.GetAllProductsForSyncAsync(cancellationToken);
+        var navProducts = await _navClient.GetProductsAsync(cancellationToken);
+        var middlewareProducts = await _dashboardMetrics.GetCreatedProductsAsync(10000, true, cancellationToken);
+
+        var actindoBySku = actindoProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        var middlewareBySku = middlewareProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+
+        var toSync = new List<NavProductSyncRequest>();
+
+        foreach (var sku in request.Skus)
+        {
+            // Get Actindo ID from either Actindo directly or Middleware
+            string? actindoId = null;
+
+            if (actindoBySku.TryGetValue(sku, out var actindoProduct))
+            {
+                actindoId = actindoProduct.Id.ToString();
+            }
+            else if (middlewareBySku.TryGetValue(sku, out var mwProduct) && mwProduct.ProductId.HasValue)
+            {
+                actindoId = mwProduct.ProductId.Value.ToString();
+            }
+
+            if (string.IsNullOrEmpty(actindoId))
+            {
+                _logger.LogWarning("Product {Sku} has no Actindo ID to sync", sku);
+                continue;
+            }
+
+            if (!navBySku.TryGetValue(sku, out var navProduct))
+            {
+                _logger.LogWarning("Product {Sku} not found in NAV", sku);
+                continue;
+            }
+
+            // Build variant sync list - force sync all variants
+            List<NavVariantSyncRequest>? variantSyncs = null;
+            if (navProduct.Variants.Count > 0)
+            {
+                variantSyncs = new List<NavVariantSyncRequest>();
+                foreach (var navVariant in navProduct.Variants)
+                {
+                    // Get Actindo ID for variant
+                    string? variantActindoId = null;
+
+                    if (actindoBySku.TryGetValue(navVariant.NavId, out var actindoVariant))
+                    {
+                        variantActindoId = actindoVariant.Id.ToString();
+                    }
+                    else if (middlewareBySku.TryGetValue(navVariant.NavId, out var mwVariant) && mwVariant.ProductId.HasValue)
+                    {
+                        variantActindoId = mwVariant.ProductId.Value.ToString();
+                    }
+
+                    if (!string.IsNullOrEmpty(variantActindoId))
+                    {
+                        // Extract just the variant code (e.g., "L" from "1042-L")
+                        var variantCode = navVariant.NavId;
+                        if (navVariant.NavId.StartsWith(sku + "-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            variantCode = navVariant.NavId[(sku.Length + 1)..];
+                        }
+
+                        variantSyncs.Add(new NavVariantSyncRequest
+                        {
+                            NavId = variantCode,
+                            ActindoId = variantActindoId
+                        });
+                    }
+                }
+            }
+
+            toSync.Add(new NavProductSyncRequest
+            {
+                NavId = navProduct.Sku,
+                ActindoId = actindoId,
+                Variants = variantSyncs?.Count > 0 ? variantSyncs : null
+            });
+        }
+
+        if (toSync.Count == 0)
+        {
+            return Ok(new { synced = 0, message = "No products to sync" });
+        }
+
+        try
+        {
+            await _navClient.SetProductActindoIdsAsync(toSync, cancellationToken);
+            _logger.LogInformation("Force synced {Count} products to NAV", toSync.Count);
+            return Ok(new { synced = toSync.Count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to force sync products to NAV");
+            return StatusCode(502, new { error = "Failed to sync to NAV API", details = ex.Message });
+        }
+    }
 }

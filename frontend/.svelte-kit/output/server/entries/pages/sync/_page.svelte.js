@@ -132,6 +132,49 @@ function Circle_x($$renderer, $$props) {
     }
   ]));
 }
+function Eraser($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
+      }
+    ],
+    ["path", { "d": "M22 21H7" }],
+    ["path", { "d": "m5 11 9 9" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "eraser" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Eraser
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJtNyAyMS00LjMtNC4zYy0xLTEtMS0yLjUgMC0zLjRsOS42LTkuNmMxLTEgMi41LTEgMy40IDBsNS42IDUuNmMxIDEgMSAyLjUgMCAzLjRMMTMgMjEiIC8+CiAgPHBhdGggZD0iTTIyIDIxSDciIC8+CiAgPHBhdGggZD0ibTUgMTEgOSA5IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/eraser
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
 function Eye_off($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   /**
@@ -288,6 +331,47 @@ function Triangle_alert($$renderer, $$props) {
        * @description Lucide SVG icon component, renders SVG Element with children.
        *
        * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJtMjEuNzMgMTgtOC0xNGEyIDIgMCAwIDAtMy40OCAwbC04IDE0QTIgMiAwIDAgMCA0IDIxaDE2YTIgMiAwIDAgMCAxLjczLTMiIC8+CiAgPHBhdGggZD0iTTEyIDl2NCIgLz4KICA8cGF0aCBkPSJNMTIgMTdoLjAxIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/triangle-alert
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
+function Zap($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+      }
+    ]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "zap" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Zap
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNNCAxNGExIDEgMCAwIDEtLjc4LTEuNjNsOS45LTEwLjJhLjUuNSAwIDAgMSAuODYuNDZsLTEuOTIgNi4wMkExIDEgMCAwIDAgMTMgMTBoN2ExIDEgMCAwIDEgLjc4IDEuNjNsLTkuOSAxMC4yYS41LjUgMCAwIDEtLjg2LS40NmwxLjkyLTYuMDJBMSAxIDAgMCAwIDExIDE0eiIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/zap
        * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
        *
        * @param {Object} props - Lucide icons props and any valid SVG attribute
@@ -540,6 +624,40 @@ function createSyncStore() {
         throw e;
       }
     },
+    async clearSelectedProductIds() {
+      if (currentState.selectedProductSkus.size === 0) return { cleared: 0 };
+      update((s) => ({ ...s, syncing: true, error: null }));
+      try {
+        const result = await sync.clearProductIds([...currentState.selectedProductSkus]);
+        await this.loadProducts();
+        update((s) => ({ ...s, syncing: false }));
+        return result;
+      } catch (e) {
+        update((s) => ({
+          ...s,
+          syncing: false,
+          error: e instanceof Error ? e.message : "Fehler beim Leeren der IDs"
+        }));
+        throw e;
+      }
+    },
+    async forceSyncSelectedProducts() {
+      if (currentState.selectedProductSkus.size === 0) return { synced: 0 };
+      update((s) => ({ ...s, syncing: true, error: null }));
+      try {
+        const result = await sync.forceSyncProducts([...currentState.selectedProductSkus]);
+        await this.loadProducts();
+        update((s) => ({ ...s, syncing: false }));
+        return result;
+      } catch (e) {
+        update((s) => ({
+          ...s,
+          syncing: false,
+          error: e instanceof Error ? e.message : "Fehler beim Synchronisieren"
+        }));
+        throw e;
+      }
+    },
     refresh() {
       if (currentState.tab === "products") {
         this.loadProducts();
@@ -622,6 +740,30 @@ function _page($$renderer, $$props) {
         syncStore.clearProductSelection();
       } else {
         syncStore.clearCustomerSelection();
+      }
+    }
+    async function handleClearIds() {
+      if (!confirm("Actindo-IDs der ausgewaehlten Produkte in NAV leeren?")) return;
+      try {
+        const result = await syncStore.clearSelectedProductIds();
+        if (result.message) {
+          successMessage = result.message;
+        } else {
+          successMessage = `Actindo-IDs von ${result.cleared} Produkt(en) geleert`;
+        }
+      } catch (e) {
+      }
+    }
+    async function handleForceSync() {
+      if (!confirm("Actindo-IDs der ausgewaehlten Produkte in NAV ueberschreiben?")) return;
+      try {
+        const result = await syncStore.forceSyncSelectedProducts();
+        if (result.message) {
+          successMessage = result.message;
+        } else {
+          successMessage = `${result.synced} Produkt(e) synchronisiert`;
+        }
+      } catch (e) {
       }
     }
     let selectedCount = syncState.tab === "products" ? syncState.selectedProductSkus.size : syncState.selectedCustomerIds.size;
@@ -925,17 +1067,22 @@ function _page($$renderer, $$props) {
           $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--> `);
-        if (needsSyncCount > 0) {
+        if (syncState.tab === "products" && (needsSyncCount > 0 || selectedCount > 0)) {
           $$renderer2.push("<!--[-->");
           $$renderer2.push(`<div class="flex flex-wrap gap-2 mb-6">`);
-          Button($$renderer2, {
-            variant: "ghost",
-            onclick: handleSelectAllNeedsSync,
-            children: ($$renderer3) => {
-              $$renderer3.push(`<!---->Alle ausstehenden auswaehlen (${escape_html(needsSyncCount)})`);
-            }
-          });
-          $$renderer2.push(`<!----> `);
+          if (needsSyncCount > 0) {
+            $$renderer2.push("<!--[-->");
+            Button($$renderer2, {
+              variant: "ghost",
+              onclick: handleSelectAllNeedsSync,
+              children: ($$renderer3) => {
+                $$renderer3.push(`<!---->Alle ausstehenden auswaehlen (${escape_html(needsSyncCount)})`);
+              }
+            });
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]--> `);
           if (selectedCount > 0) {
             $$renderer2.push("<!--[-->");
             Button($$renderer2, {
@@ -951,7 +1098,27 @@ function _page($$renderer, $$props) {
               disabled: syncState.syncing,
               children: ($$renderer3) => {
                 Arrow_right_left($$renderer3, { size: 16 });
-                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : `Auswahl synchronisieren (${selectedCount})`)}`);
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : `Sync zu NAV (${selectedCount})`)}`);
+              }
+            });
+            $$renderer2.push(`<!----> `);
+            Button($$renderer2, {
+              variant: "danger",
+              onclick: handleClearIds,
+              disabled: syncState.syncing,
+              children: ($$renderer3) => {
+                Eraser($$renderer3, { size: 16 });
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Leere..." : "Actindo ID leeren")}`);
+              }
+            });
+            $$renderer2.push(`<!----> `);
+            Button($$renderer2, {
+              variant: "primary",
+              onclick: handleForceSync,
+              disabled: syncState.syncing,
+              children: ($$renderer3) => {
+                Zap($$renderer3, { size: 16 });
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : "Actindo ID Sync")}`);
               }
             });
             $$renderer2.push(`<!---->`);
@@ -959,18 +1126,71 @@ function _page($$renderer, $$props) {
             $$renderer2.push("<!--[!-->");
           }
           $$renderer2.push(`<!--]--> `);
-          Button($$renderer2, {
-            variant: "primary",
-            onclick: handleSyncAll,
-            disabled: syncState.syncing,
-            children: ($$renderer3) => {
-              Arrow_right_left($$renderer3, { size: 16 });
-              $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : "Alle synchronisieren")}`);
-            }
-          });
-          $$renderer2.push(`<!----></div>`);
+          if (needsSyncCount > 0) {
+            $$renderer2.push("<!--[-->");
+            Button($$renderer2, {
+              variant: "ghost",
+              onclick: handleSyncAll,
+              disabled: syncState.syncing,
+              children: ($$renderer3) => {
+                Arrow_right_left($$renderer3, { size: 16 });
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : "Alle synchronisieren")}`);
+              }
+            });
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]--></div>`);
         } else {
           $$renderer2.push("<!--[!-->");
+          if (syncState.tab === "customers" && needsSyncCount > 0) {
+            $$renderer2.push("<!--[-->");
+            $$renderer2.push(`<div class="flex flex-wrap gap-2 mb-6">`);
+            Button($$renderer2, {
+              variant: "ghost",
+              onclick: handleSelectAllNeedsSync,
+              children: ($$renderer3) => {
+                $$renderer3.push(`<!---->Alle ausstehenden auswaehlen (${escape_html(needsSyncCount)})`);
+              }
+            });
+            $$renderer2.push(`<!----> `);
+            if (selectedCount > 0) {
+              $$renderer2.push("<!--[-->");
+              Button($$renderer2, {
+                variant: "ghost",
+                onclick: handleClearSelection,
+                children: ($$renderer3) => {
+                  $$renderer3.push(`<!---->Auswahl aufheben (${escape_html(selectedCount)})`);
+                }
+              });
+              $$renderer2.push(`<!----> `);
+              Button($$renderer2, {
+                onclick: handleSyncSelected,
+                disabled: syncState.syncing,
+                children: ($$renderer3) => {
+                  Arrow_right_left($$renderer3, { size: 16 });
+                  $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : `Auswahl synchronisieren (${selectedCount})`)}`);
+                }
+              });
+              $$renderer2.push(`<!---->`);
+            } else {
+              $$renderer2.push("<!--[!-->");
+            }
+            $$renderer2.push(`<!--]--> `);
+            Button($$renderer2, {
+              variant: "primary",
+              onclick: handleSyncAll,
+              disabled: syncState.syncing,
+              children: ($$renderer3) => {
+                Arrow_right_left($$renderer3, { size: 16 });
+                $$renderer3.push(`<!----> ${escape_html(syncState.syncing ? "Synchronisiere..." : "Alle synchronisieren")}`);
+              }
+            });
+            $$renderer2.push(`<!----></div>`);
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]-->`);
         }
         $$renderer2.push(`<!--]--> `);
         if (syncState.tab === "products") {
@@ -1059,7 +1279,7 @@ function _page($$renderer, $$props) {
                       $$renderer3.push("<!--[!-->");
                     }
                     $$renderer3.push(`<!--]--></td><td class="py-3 pr-4">`);
-                    if (product.status === "NeedsSync") {
+                    if (product.inNav) {
                       $$renderer3.push("<!--[-->");
                       $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedProductSkus.has(product.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
                     } else {
@@ -1107,7 +1327,7 @@ function _page($$renderer, $$props) {
                         const vNavPresence = getPresenceIcon(variant.inNav);
                         const vMwPresence = getPresenceIcon(variant.inMiddleware);
                         $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors bg-white/[0.02] ${stringify(variant.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(variant.status === "Mismatch" ? "bg-red-500/10" : "")} ${stringify(variant.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-2 pr-2"></td><td class="py-2 pr-4">`);
-                        if (variant.status === "NeedsSync") {
+                        if (variant.inNav) {
                           $$renderer3.push("<!--[-->");
                           $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedProductSkus.has(variant.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);
                         } else {
