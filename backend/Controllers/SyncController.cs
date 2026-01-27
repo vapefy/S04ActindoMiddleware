@@ -99,7 +99,11 @@ public sealed class SyncController : ControllerBase
         var items = new List<ProductSyncItemDto>();
         var synced = 0;
         var needsSync = 0;
+        var mismatch = 0;
         var orphaned = 0;
+
+        // Collect ActindoOnly products that need name fetching
+        var actindoOnlyProducts = new List<(string sku, int actindoId)>();
 
         foreach (var sku in allMasterSkus.OrderBy(s => s))
         {
@@ -133,8 +137,11 @@ public sealed class SyncController : ControllerBase
             // Count variants status
             var variantNeedsSync = variants.Count(v => v.Status == SyncStatus.NeedsSync);
             var variantOrphaned = variants.Count(v => v.Status == SyncStatus.Orphan);
+            var variantMismatch = variants.Count(v => v.Status == SyncStatus.Mismatch);
 
-            // Aggregate status - if any variant needs sync, parent needs sync
+            // Aggregate status - if any variant has issues, parent reflects it
+            if (variantMismatch > 0 && status == SyncStatus.Synced)
+                status = SyncStatus.Mismatch;
             if (variantNeedsSync > 0 && status == SyncStatus.Synced)
                 status = SyncStatus.NeedsSync;
 
@@ -146,6 +153,9 @@ public sealed class SyncController : ControllerBase
                 case SyncStatus.NeedsSync:
                     needsSync++;
                     break;
+                case SyncStatus.Mismatch:
+                    mismatch++;
+                    break;
                 case SyncStatus.Orphan:
                     orphaned++;
                     break;
@@ -156,6 +166,12 @@ public sealed class SyncController : ControllerBase
                      : !string.IsNullOrEmpty(middleware?.Name) ? middleware.Name
                      : !string.IsNullOrEmpty(actindo?.Name) ? actindo.Name
                      : string.Empty;
+
+            // Track ActindoOnly products for name fetching
+            if (status == SyncStatus.ActindoOnly && string.IsNullOrEmpty(name) && actindo != null)
+            {
+                actindoOnlyProducts.Add((sku, actindo.Id));
+            }
 
             items.Add(new ProductSyncItemDto
             {
@@ -173,6 +189,12 @@ public sealed class SyncController : ControllerBase
             });
         }
 
+        // Fetch names for ActindoOnly products from Actindo API
+        if (actindoOnlyProducts.Count > 0)
+        {
+            await FetchActindoOnlyNamesAsync(items, actindoOnlyProducts, cancellationToken);
+        }
+
         return Ok(new ProductSyncStatusDto
         {
             TotalInActindo = actindoProducts.Count(p => p.VariantStatus != "child"),
@@ -180,9 +202,140 @@ public sealed class SyncController : ControllerBase
             TotalInMiddleware = middlewareProducts.Count(p => p.VariantStatus != "child"),
             Synced = synced,
             NeedsSync = needsSync,
+            Mismatch = mismatch,
             Orphaned = orphaned,
             Items = items
         });
+    }
+
+    /// <summary>
+    /// Fetch names for ActindoOnly products from Actindo API
+    /// </summary>
+    private async Task FetchActindoOnlyNamesAsync(
+        List<ProductSyncItemDto> items,
+        List<(string sku, int actindoId)> actindoOnlyProducts,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Fetching names for {Count} ActindoOnly products", actindoOnlyProducts.Count);
+
+        // Fetch in parallel (max 5 concurrent)
+        var semaphore = new SemaphoreSlim(5);
+        var tasks = actindoOnlyProducts.Select(async p =>
+        {
+            await semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                var details = await _actindoProductService.GetProductDetailsAsync(p.actindoId, cancellationToken);
+                return (p.sku, details);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+
+        // Update items with fetched names
+        var detailsBySku = results
+            .Where(r => r.details != null)
+            .ToDictionary(r => r.sku, r => r.details!, StringComparer.OrdinalIgnoreCase);
+
+        // Also collect variant details to fetch
+        var variantIdsToFetch = new List<(string masterSku, int variantId)>();
+        foreach (var (sku, details) in detailsBySku)
+        {
+            if (details.ChildrenIds.Count > 0)
+            {
+                foreach (var childId in details.ChildrenIds)
+                {
+                    variantIdsToFetch.Add((sku, childId));
+                }
+            }
+        }
+
+        // Fetch variant details
+        var variantDetails = new Dictionary<int, ActindoProductDetails>();
+        if (variantIdsToFetch.Count > 0)
+        {
+            var variantTasks = variantIdsToFetch.Select(async v =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var details = await _actindoProductService.GetProductDetailsAsync(v.variantId, cancellationToken);
+                    return (v.variantId, details);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var variantResults = await Task.WhenAll(variantTasks);
+            foreach (var (id, det) in variantResults)
+            {
+                if (det != null)
+                    variantDetails[id] = det;
+            }
+        }
+
+        // Now update the items list
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (detailsBySku.TryGetValue(item.Sku, out var details))
+            {
+                // Update master name
+                var updatedVariants = item.Variants.ToList();
+
+                // Update variant names using _pim_varcode
+                for (var j = 0; j < updatedVariants.Count; j++)
+                {
+                    var variant = updatedVariants[j];
+                    if (string.IsNullOrEmpty(variant.Name) && !string.IsNullOrEmpty(variant.ActindoId))
+                    {
+                        if (int.TryParse(variant.ActindoId, out var variantId) &&
+                            variantDetails.TryGetValue(variantId, out var varDet))
+                        {
+                            // Use varcode as name for variants
+                            var varName = !string.IsNullOrEmpty(varDet.VariantCode)
+                                ? varDet.VariantCode
+                                : varDet.Name;
+
+                            updatedVariants[j] = new ProductVariantSyncItemDto
+                            {
+                                Sku = variant.Sku,
+                                VariantCode = variant.VariantCode,
+                                Name = varName,
+                                ActindoId = variant.ActindoId,
+                                NavActindoId = variant.NavActindoId,
+                                MiddlewareActindoId = variant.MiddlewareActindoId,
+                                InActindo = variant.InActindo,
+                                InNav = variant.InNav,
+                                InMiddleware = variant.InMiddleware,
+                                Status = variant.Status
+                            };
+                        }
+                    }
+                }
+
+                items[i] = new ProductSyncItemDto
+                {
+                    Sku = item.Sku,
+                    Name = details.Name,
+                    VariantStatus = item.VariantStatus,
+                    ActindoId = item.ActindoId,
+                    NavActindoId = item.NavActindoId,
+                    MiddlewareActindoId = item.MiddlewareActindoId,
+                    InActindo = item.InActindo,
+                    InNav = item.InNav,
+                    InMiddleware = item.InMiddleware,
+                    Status = item.Status,
+                    Variants = updatedVariants
+                };
+            }
+        }
     }
 
     private List<ProductVariantSyncItemDto> BuildVariantsList(
@@ -285,6 +438,16 @@ public sealed class SyncController : ControllerBase
         if (!inActindo && (inNav || inMiddleware) && (!string.IsNullOrEmpty(navActindoId) || !string.IsNullOrEmpty(middlewareActindoId)))
         {
             return SyncStatus.Orphan;
+        }
+
+        // Mismatch: NAV has an Actindo ID but it doesn't match the actual Actindo ID
+        // Actindo is the source of truth for Actindo IDs
+        if (inActindo && inNav && !string.IsNullOrEmpty(actindoId) && !string.IsNullOrEmpty(navActindoId))
+        {
+            if (!string.Equals(actindoId, navActindoId, StringComparison.OrdinalIgnoreCase))
+            {
+                return SyncStatus.Mismatch;
+            }
         }
 
         // Actindo only: Exists in Actindo but not in NAV or Middleware

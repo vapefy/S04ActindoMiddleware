@@ -15,6 +15,7 @@ interface SyncState {
 	selectedProductSkus: Set<string>;
 	selectedCustomerIds: Set<string>;
 	expandedProducts: Set<string>;
+	hideSynced: boolean;
 }
 
 function createSyncStore() {
@@ -28,7 +29,8 @@ function createSyncStore() {
 		error: null,
 		selectedProductSkus: new Set(),
 		selectedCustomerIds: new Set(),
-		expandedProducts: new Set()
+		expandedProducts: new Set(),
+		hideSynced: true // Default to hiding synced products
 	});
 
 	let currentState: SyncState;
@@ -167,6 +169,10 @@ function createSyncStore() {
 			update((s) => ({ ...s, expandedProducts: new Set() }));
 		},
 
+		toggleHideSynced() {
+			update((s) => ({ ...s, hideSynced: !s.hideSynced }));
+		},
+
 		toggleCustomerSelection(debtorNumber: string) {
 			update((s) => {
 				const newSet = new Set(s.selectedCustomerIds);
@@ -302,7 +308,8 @@ function createSyncStore() {
 				error: null,
 				selectedProductSkus: new Set(),
 				selectedCustomerIds: new Set(),
-				expandedProducts: new Set()
+				expandedProducts: new Set(),
+				hideSynced: true
 			});
 		}
 	};

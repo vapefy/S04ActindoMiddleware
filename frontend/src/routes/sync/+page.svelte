@@ -13,7 +13,10 @@
 		ChevronRight,
 		ChevronDown,
 		Trash2,
-		Info
+		Info,
+		Eye,
+		EyeOff,
+		CircleAlert
 	} from 'lucide-svelte';
 	import { syncStore, type SyncTab } from '$stores/sync';
 	import { permissions } from '$stores/auth';
@@ -118,12 +121,23 @@
 
 	let orphanCount = $derived(syncState.products?.orphaned ?? 0);
 
+	let mismatchCount = $derived(syncState.products?.mismatch ?? 0);
+
+	// Filter items based on hideSynced setting
+	let filteredProductItems = $derived(
+		syncState.hideSynced && syncState.products
+			? syncState.products.items.filter((p) => p.status !== 'Synced')
+			: syncState.products?.items ?? []
+	);
+
 	function getStatusBadge(status: SyncStatus) {
 		switch (status) {
 			case 'Synced':
 				return { variant: 'success' as const, label: 'Sync' };
 			case 'NeedsSync':
 				return { variant: 'warning' as const, label: 'Sync fehlt' };
+			case 'Mismatch':
+				return { variant: 'error' as const, label: 'Falsche ID' };
 			case 'Orphan':
 				return { variant: 'error' as const, label: 'Verwaist' };
 			case 'ActindoOnly':
@@ -141,6 +155,8 @@
 				return { icon: CheckCircle2, class: 'text-green-400' };
 			case 'NeedsSync':
 				return { icon: AlertTriangle, class: 'text-amber-400' };
+			case 'Mismatch':
+				return { icon: CircleAlert, class: 'text-red-400' };
 			case 'Orphan':
 				return { icon: Trash2, class: 'text-red-400' };
 			case 'ActindoOnly':
@@ -216,6 +232,9 @@
 				{#if syncState.products.needsSync > 0}
 					<Badge variant="warning">{syncState.products.needsSync}</Badge>
 				{/if}
+				{#if syncState.products.mismatch > 0}
+					<Badge variant="error" title="Falsche IDs">{syncState.products.mismatch}</Badge>
+				{/if}
 				{#if syncState.products.orphaned > 0}
 					<Badge variant="error">{syncState.products.orphaned}</Badge>
 				{/if}
@@ -241,7 +260,7 @@
 
 	<!-- Summary Cards for Products (3-way) -->
 	{#if syncState.tab === 'products' && syncState.products}
-		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+		<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
 			<Card class="text-center">
 				<p class="text-3xl font-bold text-blue-400">{syncState.products.totalInActindo}</p>
 				<p class="text-sm text-gray-400">In Actindo</p>
@@ -261,6 +280,10 @@
 			<Card class="text-center">
 				<p class="text-3xl font-bold text-amber-400">{syncState.products.needsSync}</p>
 				<p class="text-sm text-gray-400">Sync fehlt</p>
+			</Card>
+			<Card class="text-center">
+				<p class="text-3xl font-bold text-red-400">{syncState.products.mismatch}</p>
+				<p class="text-sm text-gray-400">Falsche ID</p>
 			</Card>
 			<Card class="text-center">
 				<p class="text-3xl font-bold text-red-400">{syncState.products.orphaned}</p>
@@ -286,6 +309,14 @@
 				<p class="text-sm text-gray-400">Ausstehend</p>
 			</Card>
 		</div>
+	{/if}
+
+	<!-- Mismatch Warning -->
+	{#if syncState.tab === 'products' && mismatchCount > 0}
+		<Alert variant="error" class="mb-6">
+			<strong>ID Konflikt:</strong> {mismatchCount} Produkt(e) haben in NAV eine falsche Actindo-ID eingetragen.
+			Die IDs in NAV sollten korrigiert werden.
+		</Alert>
 	{/if}
 
 	<!-- Orphan Warning -->
@@ -325,19 +356,35 @@
 				<Spinner />
 			</div>
 		{:else if syncState.products && syncState.products.items.length > 0}
-			<!-- Expand/Collapse buttons -->
-			{#if syncState.products.items.some((p) => p.variantStatus === 'master' && p.variants.length > 0)}
-				<div class="flex gap-2 mb-4">
-					<Button variant="ghost" size="small" onclick={() => syncStore.expandAllProducts()}>
-						<ChevronDown size={14} />
-						Alle aufklappen
-					</Button>
-					<Button variant="ghost" size="small" onclick={() => syncStore.collapseAllProducts()}>
-						<ChevronRight size={14} />
-						Alle zuklappen
-					</Button>
+			<!-- Filter and Expand/Collapse buttons -->
+			<div class="flex justify-between items-center mb-4">
+				<div class="flex gap-2">
+					{#if syncState.products.items.some((p) => p.variantStatus === 'master' && p.variants.length > 0)}
+						<Button variant="ghost" size="small" onclick={() => syncStore.expandAllProducts()}>
+							<ChevronDown size={14} />
+							Alle aufklappen
+						</Button>
+						<Button variant="ghost" size="small" onclick={() => syncStore.collapseAllProducts()}>
+							<ChevronRight size={14} />
+							Alle zuklappen
+						</Button>
+					{/if}
 				</div>
-			{/if}
+				<Button
+					variant="ghost"
+					size="small"
+					onclick={() => syncStore.toggleHideSynced()}
+					title={syncState.hideSynced ? 'Synchronisierte anzeigen' : 'Synchronisierte ausblenden'}
+				>
+					{#if syncState.hideSynced}
+						<Eye size={14} />
+						Sync anzeigen ({syncState.products.synced})
+					{:else}
+						<EyeOff size={14} />
+						Sync ausblenden
+					{/if}
+				</Button>
+			</div>
 
 			<Card>
 				<div class="overflow-x-auto">
@@ -358,7 +405,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each syncState.products.items as product}
+							{#each filteredProductItems as product}
 								{@const hasVariants = product.variantStatus === 'master' && product.variants.length > 0}
 								{@const isExpanded = syncState.expandedProducts.has(product.sku)}
 								{@const statusBadge = getStatusBadge(product.status)}
@@ -371,6 +418,7 @@
 								<tr
 									class="border-b border-white/5 hover:bg-white/5 transition-colors
 										{product.status === 'NeedsSync' ? 'bg-amber-500/5' : ''}
+										{product.status === 'Mismatch' ? 'bg-red-500/10' : ''}
 										{product.status === 'Orphan' ? 'bg-red-500/5' : ''}"
 								>
 									<td class="py-3 pr-2">
@@ -447,6 +495,7 @@
 										<tr
 											class="border-b border-white/5 hover:bg-white/5 transition-colors bg-white/[0.02]
 												{variant.status === 'NeedsSync' ? 'bg-amber-500/5' : ''}
+												{variant.status === 'Mismatch' ? 'bg-red-500/10' : ''}
 												{variant.status === 'Orphan' ? 'bg-red-500/5' : ''}"
 										>
 											<td class="py-2 pr-2"></td>

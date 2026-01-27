@@ -16,6 +16,47 @@ import { A as Arrow_right_left } from "../../../chunks/arrow-right-left.js";
 import { C as Chevron_right } from "../../../chunks/chevron-right.js";
 import { T as Trash_2 } from "../../../chunks/trash-2.js";
 import { $ as escape_html } from "../../../chunks/context.js";
+function Circle_alert($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    ["circle", { "cx": "12", "cy": "12", "r": "10" }],
+    ["line", { "x1": "12", "x2": "12", "y1": "8", "y2": "12" }],
+    [
+      "line",
+      { "x1": "12", "x2": "12.01", "y1": "16", "y2": "16" }
+    ]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "circle-alert" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name CircleAlert
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIgLz4KICA8bGluZSB4MT0iMTIiIHgyPSIxMiIgeTE9IjgiIHkyPSIxMiIgLz4KICA8bGluZSB4MT0iMTIiIHgyPSIxMi4wMSIgeTE9IjE2IiB5Mj0iMTYiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/circle-alert
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
 function Circle_check($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   /**
@@ -75,6 +116,97 @@ function Circle_x($$renderer, $$props) {
        * @description Lucide SVG icon component, renders SVG Element with children.
        *
        * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIgLz4KICA8cGF0aCBkPSJtMTUgOS02IDYiIC8+CiAgPHBhdGggZD0ibTkgOSA2IDYiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/circle-x
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
+function Eye_off($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+      }
+    ],
+    ["path", { "d": "M14.084 14.158a3 3 0 0 1-4.242-4.242" }],
+    [
+      "path",
+      {
+        "d": "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+      }
+    ],
+    ["path", { "d": "m2 2 20 20" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "eye-off" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name EyeOff
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTAuNzMzIDUuMDc2YTEwLjc0NCAxMC43NDQgMCAwIDEgMTEuMjA1IDYuNTc1IDEgMSAwIDAgMSAwIC42OTYgMTAuNzQ3IDEwLjc0NyAwIDAgMS0xLjQ0NCAyLjQ5IiAvPgogIDxwYXRoIGQ9Ik0xNC4wODQgMTQuMTU4YTMgMyAwIDAgMS00LjI0Mi00LjI0MiIgLz4KICA8cGF0aCBkPSJNMTcuNDc5IDE3LjQ5OWExMC43NSAxMC43NSAwIDAgMS0xNS40MTctNS4xNTEgMSAxIDAgMCAxIDAtLjY5NiAxMC43NSAxMC43NSAwIDAgMSA0LjQ0Ni01LjE0MyIgLz4KICA8cGF0aCBkPSJtMiAyIDIwIDIwIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/eye-off
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
+function Eye($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  /**
+   * @license lucide-svelte v0.460.1 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+      }
+    ],
+    ["circle", { "cx": "12", "cy": "12", "r": "3" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "eye" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Eye
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMi4wNjIgMTIuMzQ4YTEgMSAwIDAgMSAwLS42OTYgMTAuNzUgMTAuNzUgMCAwIDEgMTkuODc2IDAgMSAxIDAgMCAxIDAgLjY5NiAxMC43NSAxMC43NSAwIDAgMS0xOS44NzYgMCIgLz4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIzIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/eye
        * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
        *
        * @param {Object} props - Lucide icons props and any valid SVG attribute
@@ -183,7 +315,9 @@ function createSyncStore() {
     error: null,
     selectedProductSkus: /* @__PURE__ */ new Set(),
     selectedCustomerIds: /* @__PURE__ */ new Set(),
-    expandedProducts: /* @__PURE__ */ new Set()
+    expandedProducts: /* @__PURE__ */ new Set(),
+    hideSynced: true
+    // Default to hiding synced products
   });
   let currentState;
   subscribe((s) => currentState = s);
@@ -304,6 +438,9 @@ function createSyncStore() {
     collapseAllProducts() {
       update((s) => ({ ...s, expandedProducts: /* @__PURE__ */ new Set() }));
     },
+    toggleHideSynced() {
+      update((s) => ({ ...s, hideSynced: !s.hideSynced }));
+    },
     toggleCustomerSelection(debtorNumber) {
       update((s) => {
         const newSet = new Set(s.selectedCustomerIds);
@@ -421,7 +558,8 @@ function createSyncStore() {
         error: null,
         selectedProductSkus: /* @__PURE__ */ new Set(),
         selectedCustomerIds: /* @__PURE__ */ new Set(),
-        expandedProducts: /* @__PURE__ */ new Set()
+        expandedProducts: /* @__PURE__ */ new Set(),
+        hideSynced: true
       });
     }
   };
@@ -489,12 +627,16 @@ function _page($$renderer, $$props) {
     let selectedCount = syncState.tab === "products" ? syncState.selectedProductSkus.size : syncState.selectedCustomerIds.size;
     let needsSyncCount = syncState.tab === "products" ? syncState.products?.needsSync ?? 0 : syncState.customers?.needsSync ?? 0;
     let orphanCount = syncState.products?.orphaned ?? 0;
+    let mismatchCount = syncState.products?.mismatch ?? 0;
+    let filteredProductItems = syncState.hideSynced && syncState.products ? syncState.products.items.filter((p) => p.status !== "Synced") : syncState.products?.items ?? [];
     function getStatusBadge(status) {
       switch (status) {
         case "Synced":
           return { variant: "success", label: "Sync" };
         case "NeedsSync":
           return { variant: "warning", label: "Sync fehlt" };
+        case "Mismatch":
+          return { variant: "error", label: "Falsche ID" };
         case "Orphan":
           return { variant: "error", label: "Verwaist" };
         case "ActindoOnly":
@@ -511,6 +653,8 @@ function _page($$renderer, $$props) {
           return { icon: Circle_check, class: "text-green-400" };
         case "NeedsSync":
           return { icon: Triangle_alert, class: "text-amber-400" };
+        case "Mismatch":
+          return { icon: Circle_alert, class: "text-red-400" };
         case "Orphan":
           return { icon: Trash_2, class: "text-red-400" };
         case "ActindoOnly":
@@ -620,6 +764,18 @@ function _page($$renderer, $$props) {
             $$renderer2.push("<!--[!-->");
           }
           $$renderer2.push(`<!--]--> `);
+          if (syncState.products.mismatch > 0) {
+            $$renderer2.push("<!--[-->");
+            Badge($$renderer2, {
+              variant: "error",
+              children: ($$renderer3) => {
+                $$renderer3.push(`<!---->${escape_html(syncState.products.mismatch)}`);
+              }
+            });
+          } else {
+            $$renderer2.push("<!--[!-->");
+          }
+          $$renderer2.push(`<!--]--> `);
           if (syncState.products.orphaned > 0) {
             $$renderer2.push("<!--[-->");
             Badge($$renderer2, {
@@ -652,7 +808,7 @@ function _page($$renderer, $$props) {
         $$renderer2.push(`<!--]--></button></div> `);
         if (syncState.tab === "products" && syncState.products) {
           $$renderer2.push("<!--[-->");
-          $$renderer2.push(`<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">`);
+          $$renderer2.push(`<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">`);
           Card($$renderer2, {
             class: "text-center",
             children: ($$renderer3) => {
@@ -685,6 +841,13 @@ function _page($$renderer, $$props) {
             class: "text-center",
             children: ($$renderer3) => {
               $$renderer3.push(`<p class="text-3xl font-bold text-amber-400">${escape_html(syncState.products.needsSync)}</p> <p class="text-sm text-gray-400">Sync fehlt</p>`);
+            }
+          });
+          $$renderer2.push(`<!----> `);
+          Card($$renderer2, {
+            class: "text-center",
+            children: ($$renderer3) => {
+              $$renderer3.push(`<p class="text-3xl font-bold text-red-400">${escape_html(syncState.products.mismatch)}</p> <p class="text-sm text-gray-400">Falsche ID</p>`);
             }
           });
           $$renderer2.push(`<!----> `);
@@ -732,6 +895,20 @@ function _page($$renderer, $$props) {
             $$renderer2.push("<!--[!-->");
           }
           $$renderer2.push(`<!--]-->`);
+        }
+        $$renderer2.push(`<!--]--> `);
+        if (syncState.tab === "products" && mismatchCount > 0) {
+          $$renderer2.push("<!--[-->");
+          Alert($$renderer2, {
+            variant: "error",
+            class: "mb-6",
+            children: ($$renderer3) => {
+              $$renderer3.push(`<strong>ID Konflikt:</strong> ${escape_html(mismatchCount)} Produkt(e) haben in NAV eine falsche Actindo-ID eingetragen.
+			Die IDs in NAV sollten korrigiert werden.`);
+            }
+          });
+        } else {
+          $$renderer2.push("<!--[!-->");
         }
         $$renderer2.push(`<!--]--> `);
         if (syncState.tab === "products" && orphanCount > 0) {
@@ -807,9 +984,9 @@ function _page($$renderer, $$props) {
             $$renderer2.push("<!--[!-->");
             if (syncState.products && syncState.products.items.length > 0) {
               $$renderer2.push("<!--[-->");
+              $$renderer2.push(`<div class="flex justify-between items-center mb-4"><div class="flex gap-2">`);
               if (syncState.products.items.some((p) => p.variantStatus === "master" && p.variants.length > 0)) {
                 $$renderer2.push("<!--[-->");
-                $$renderer2.push(`<div class="flex gap-2 mb-4">`);
                 Button($$renderer2, {
                   variant: "ghost",
                   size: "small",
@@ -829,15 +1006,34 @@ function _page($$renderer, $$props) {
                     $$renderer3.push(`<!----> Alle zuklappen`);
                   }
                 });
-                $$renderer2.push(`<!----></div>`);
+                $$renderer2.push(`<!---->`);
               } else {
                 $$renderer2.push("<!--[!-->");
               }
-              $$renderer2.push(`<!--]--> `);
+              $$renderer2.push(`<!--]--></div> `);
+              Button($$renderer2, {
+                variant: "ghost",
+                size: "small",
+                onclick: () => syncStore.toggleHideSynced(),
+                title: syncState.hideSynced ? "Synchronisierte anzeigen" : "Synchronisierte ausblenden",
+                children: ($$renderer3) => {
+                  if (syncState.hideSynced) {
+                    $$renderer3.push("<!--[-->");
+                    Eye($$renderer3, { size: 14 });
+                    $$renderer3.push(`<!----> Sync anzeigen (${escape_html(syncState.products.synced)})`);
+                  } else {
+                    $$renderer3.push("<!--[!-->");
+                    Eye_off($$renderer3, { size: 14 });
+                    $$renderer3.push(`<!----> Sync ausblenden`);
+                  }
+                  $$renderer3.push(`<!--]-->`);
+                }
+              });
+              $$renderer2.push(`<!----></div> `);
               Card($$renderer2, {
                 children: ($$renderer3) => {
                   $$renderer3.push(`<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-white/10 text-left text-sm text-gray-400"><th class="pb-3 pr-2 w-8"></th><th class="pb-3 pr-4 w-10"></th><th class="pb-3 pr-4">SKU</th><th class="pb-3 pr-4">Name</th><th class="pb-3 pr-4">Typ</th><th class="pb-3 pr-2 text-center" title="In Actindo">Act</th><th class="pb-3 pr-2 text-center" title="In NAV">NAV</th><th class="pb-3 pr-2 text-center" title="In Middleware">MW</th><th class="pb-3 pr-4 text-right">Actindo ID</th><th class="pb-3 pr-4 text-right">NAV Actindo ID</th><th class="pb-3 text-center">Status</th></tr></thead><tbody><!--[-->`);
-                  const each_array = ensure_array_like(syncState.products.items);
+                  const each_array = ensure_array_like(filteredProductItems);
                   for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
                     let product = each_array[$$index_1];
                     const hasVariants = product.variantStatus === "master" && product.variants.length > 0;
@@ -847,7 +1043,7 @@ function _page($$renderer, $$props) {
                     const actindoPresence = getPresenceIcon(product.inActindo);
                     const navPresence = getPresenceIcon(product.inNav);
                     const mwPresence = getPresenceIcon(product.inMiddleware);
-                    $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors ${stringify(product.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(product.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-3 pr-2">`);
+                    $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors ${stringify(product.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(product.status === "Mismatch" ? "bg-red-500/10" : "")} ${stringify(product.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-3 pr-2">`);
                     if (hasVariants) {
                       $$renderer3.push("<!--[-->");
                       $$renderer3.push(`<button type="button" class="p-1 hover:bg-white/10 rounded">`);
@@ -910,7 +1106,7 @@ function _page($$renderer, $$props) {
                         const vActindoPresence = getPresenceIcon(variant.inActindo);
                         const vNavPresence = getPresenceIcon(variant.inNav);
                         const vMwPresence = getPresenceIcon(variant.inMiddleware);
-                        $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors bg-white/[0.02] ${stringify(variant.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(variant.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-2 pr-2"></td><td class="py-2 pr-4">`);
+                        $$renderer3.push(`<tr${attr_class(`border-b border-white/5 hover:bg-white/5 transition-colors bg-white/[0.02] ${stringify(variant.status === "NeedsSync" ? "bg-amber-500/5" : "")} ${stringify(variant.status === "Mismatch" ? "bg-red-500/10" : "")} ${stringify(variant.status === "Orphan" ? "bg-red-500/5" : "")}`)}><td class="py-2 pr-2"></td><td class="py-2 pr-4">`);
                         if (variant.status === "NeedsSync") {
                           $$renderer3.push("<!--[-->");
                           $$renderer3.push(`<input type="checkbox"${attr("checked", syncState.selectedProductSkus.has(variant.sku), true)} class="w-4 h-4 rounded bg-white/10 border-white/20 text-royal-500 focus:ring-royal-400"/>`);

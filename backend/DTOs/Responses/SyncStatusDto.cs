@@ -9,6 +9,8 @@ public enum SyncStatus
     Synced,
     /// <summary>Actindo ID needs to be synced to NAV</summary>
     NeedsSync,
+    /// <summary>NAV has wrong Actindo ID (doesn't match actual Actindo ID)</summary>
+    Mismatch,
     /// <summary>Product exists in NAV/Middleware but was deleted from Actindo</summary>
     Orphan,
     /// <summary>Product only exists in Actindo, not known to Middleware</summary>
@@ -57,6 +59,7 @@ public sealed class ProductSyncItemDto
     public SyncStatus Status { get; init; }
     public bool NeedsSync => Status == SyncStatus.NeedsSync;
     public bool IsOrphan => Status == SyncStatus.Orphan;
+    public bool IsMismatch => Status == SyncStatus.Mismatch;
 
     // Nested variants for master products
     public IReadOnlyList<ProductVariantSyncItemDto> Variants { get; init; } = [];
@@ -85,6 +88,7 @@ public sealed class ProductSyncStatusDto
     public int TotalInMiddleware { get; init; }
     public int Synced { get; init; }
     public int NeedsSync { get; init; }
+    public int Mismatch { get; init; }
     public int Orphaned { get; init; }
     public IReadOnlyList<ProductSyncItemDto> Items { get; init; } = [];
 }

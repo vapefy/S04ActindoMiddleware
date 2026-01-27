@@ -164,7 +164,7 @@ export interface ActindoSettings {
 }
 
 // Sync Types
-export type SyncStatus = 'Synced' | 'NeedsSync' | 'Orphan' | 'ActindoOnly' | 'NavOnly';
+export type SyncStatus = 'Synced' | 'NeedsSync' | 'Mismatch' | 'Orphan' | 'ActindoOnly' | 'NavOnly';
 
 export interface ProductVariantSyncItem {
 	sku: string;
@@ -192,6 +192,7 @@ export interface ProductSyncItem {
 	status: SyncStatus;
 	needsSync: boolean;
 	isOrphan: boolean;
+	isMismatch: boolean;
 	variants: ProductVariantSyncItem[];
 }
 
@@ -210,6 +211,7 @@ export interface ProductSyncStatus {
 	totalInMiddleware: number;
 	synced: number;
 	needsSync: number;
+	mismatch: number;
 	orphaned: number;
 	items: ProductSyncItem[];
 }

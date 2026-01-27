@@ -44,6 +44,7 @@ public sealed record ActindoProductDetails
     public required string Sku { get; init; }
     public required string Name { get; init; }
     public required string VariantStatus { get; init; }
+    public string? VariantCode { get; init; }
     public IReadOnlyList<int> ChildrenIds { get; init; } = Array.Empty<int>();
     public decimal? Price { get; init; }
 }
@@ -122,6 +123,9 @@ public sealed class ActindoProductListService
             var sku = data.TryGetProperty("sku", out var skuProp) ? skuProp.GetString() ?? string.Empty : string.Empty;
             var variantStatus = data.TryGetProperty("variantStatus", out var vsProp) ? vsProp.GetString() ?? "single" : "single";
 
+            // Get variant code for child products
+            var variantCode = data.TryGetProperty("_pim_varcode", out var vcProp) ? vcProp.GetString() : null;
+
             // Get name from various possible fields
             var name = GetFirstNonEmpty(data,
                 "_pim_art_name__actindo_basic__de_DE",
@@ -171,6 +175,7 @@ public sealed class ActindoProductListService
                 Sku = sku,
                 Name = name,
                 VariantStatus = variantStatus,
+                VariantCode = variantCode,
                 ChildrenIds = childrenIds,
                 Price = price
             };
