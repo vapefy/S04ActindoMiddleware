@@ -151,7 +151,11 @@ public sealed class SyncController : ControllerBase
                     break;
             }
 
-            var name = actindo?.Name ?? nav?.Name ?? middleware?.Name ?? string.Empty;
+            // NAV returns names, Actindo getList doesn't - prefer NAV name
+            var name = !string.IsNullOrEmpty(nav?.Name) ? nav.Name
+                     : !string.IsNullOrEmpty(middleware?.Name) ? middleware.Name
+                     : !string.IsNullOrEmpty(actindo?.Name) ? actindo.Name
+                     : string.Empty;
 
             items.Add(new ProductSyncItemDto
             {
@@ -245,7 +249,11 @@ public sealed class SyncController : ControllerBase
                 ? varSku[(masterSku.Length + 1)..]
                 : varSku;
 
-            var name = actindoChild?.Name ?? navVariant?.Name ?? mwChild?.Name ?? string.Empty;
+            // NAV returns names, Actindo getList doesn't - prefer NAV name
+            var name = !string.IsNullOrEmpty(navVariant?.Name) ? navVariant.Name
+                     : !string.IsNullOrEmpty(mwChild?.Name) ? mwChild.Name
+                     : !string.IsNullOrEmpty(actindoChild?.Name) ? actindoChild.Name
+                     : string.Empty;
 
             variants.Add(new ProductVariantSyncItemDto
             {
