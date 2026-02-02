@@ -185,6 +185,7 @@ public abstract class ProductSynchronizationService
                 var indiResult = await HandleIndiVariantAsync(
                     masterProduct,
                     variant,
+                    masterProductId,
                     cancellationToken);
                 return new VariantSyncResult(index, indiResult, null);
             }
@@ -397,6 +398,7 @@ public abstract class ProductSynchronizationService
     private async Task<VariantCreationResult> HandleIndiVariantAsync(
         ProductDto masterProduct,
         ProductDto variant,
+        int masterProductId,
         CancellationToken cancellationToken)
     {
         var masterSku = $"{masterProduct.sku}-INDI";
@@ -414,6 +416,29 @@ public abstract class ProductSynchronizationService
             "INDI master product created for SKU {Sku} with ID {Id}",
             masterSku,
             indiMasterId);
+
+        var relationPayload = new
+        {
+            variantProduct = new { id = indiMasterId },
+            parentProduct = new { id = masterProductId }
+        };
+        LogEndpointPayload(endpoints.CreateRelation, relationPayload);
+        await _relationLock.WaitAsync(cancellationToken);
+        try
+        {
+            await _client.PostAsync(
+                endpoints.CreateRelation,
+                relationPayload,
+                cancellationToken);
+            _logger.LogInformation(
+                "INDI variant {Sku} linked to master {MasterId}",
+                masterSku,
+                masterProductId);
+        }
+        finally
+        {
+            _relationLock.Release();
+        }
 
         return new VariantCreationResult(masterSku, indiMasterId);
     }
