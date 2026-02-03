@@ -384,6 +384,9 @@ public abstract class ProductSynchronizationService
             ["_pim_art_name__actindo_basic__en_US"] = name
         };
 
+        if (!string.IsNullOrWhiteSpace(variant.id))
+            payload["id"] = variant.id;
+
         if (variant._pim_price is not null)
             payload["_pim_price"] = variant._pim_price;
 
