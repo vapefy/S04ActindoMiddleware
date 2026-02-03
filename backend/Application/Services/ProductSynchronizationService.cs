@@ -415,32 +415,9 @@ public abstract class ProductSynchronizationService
         var indiMasterId = ReadProductId(indiMasterResponse);
 
         _logger.LogInformation(
-            "INDI master product created for SKU {Sku} with ID {Id}",
+            "INDI product synced for SKU {Sku} with ID {Id} (no relation to master)",
             masterSku,
             indiMasterId);
-
-        var relationPayload = new
-        {
-            variantProduct = new { id = indiMasterId },
-            parentProduct = new { id = masterProductId }
-        };
-        LogEndpointPayload(endpoints.CreateRelation, relationPayload);
-        await _relationLock.WaitAsync(cancellationToken);
-        try
-        {
-            await _client.PostAsync(
-                endpoints.CreateRelation,
-                relationPayload,
-                cancellationToken);
-            _logger.LogInformation(
-                "INDI variant {Sku} linked to master {MasterId}",
-                masterSku,
-                masterProductId);
-        }
-        finally
-        {
-            _relationLock.Release();
-        }
 
         return new VariantCreationResult(masterSku, indiMasterId);
     }
