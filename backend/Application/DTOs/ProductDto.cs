@@ -6,7 +6,7 @@ namespace ActindoMiddleware.DTOs;
 
 public sealed class ProductDto
 {
-    public int? id { get; set; }
+    public string? id { get; set; }
     public string sku { get; set; } = default!;
     public int attributeSetId { get; set; }
     public string variantStatus { get; set; } = default!;
