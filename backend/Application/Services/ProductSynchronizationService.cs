@@ -186,6 +186,7 @@ public abstract class ProductSynchronizationService
                     masterProduct,
                     variant,
                     masterProductId,
+                    productEndpoint,
                     cancellationToken);
                 return new VariantSyncResult(index, indiResult, null);
             }
@@ -399,14 +400,15 @@ public abstract class ProductSynchronizationService
         ProductDto masterProduct,
         ProductDto variant,
         int masterProductId,
+        string productEndpoint,
         CancellationToken cancellationToken)
     {
         var masterSku = $"{masterProduct.sku}-INDI";
         var indiMasterPayload = new { product = BuildIndiMasterPayload(masterProduct, variant, masterSku) };
         var endpoints = await ResolveEndpointsAsync(cancellationToken);
-        LogEndpointPayload(endpoints.CreateProduct, indiMasterPayload);
+        LogEndpointPayload(productEndpoint, indiMasterPayload);
         var indiMasterResponse = await _client.PostAsync(
-            endpoints.CreateProduct,
+            productEndpoint,
             indiMasterPayload,
             cancellationToken);
 
