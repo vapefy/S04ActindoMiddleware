@@ -33,10 +33,13 @@ public sealed class ActindoCustomersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateCustomerResponse>> CreateCustomer(
         [FromBody] CreateCustomerRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Customer == null || request.PrimaryAddress == null)
             return BadRequest("Customer and primaryAddress are required");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Customer,
@@ -77,10 +80,13 @@ public sealed class ActindoCustomersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateCustomerResponse>> SaveCustomer(
         [FromBody] SaveCustomerRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Customer == null || request.PrimaryAddress == null)
             return BadRequest("Customer and primaryAddress are required");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Customer,

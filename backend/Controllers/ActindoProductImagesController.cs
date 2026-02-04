@@ -30,10 +30,13 @@ public sealed class ActindoProductImagesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateProductResponse>> UploadImages(
         [FromBody] UploadProductImagesRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Images == null || request.Paths == null)
             return BadRequest("Images and paths are required.");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Media,

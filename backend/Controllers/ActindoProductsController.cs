@@ -276,12 +276,15 @@ public sealed class ActindoProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AdjustInventory(
         [FromBody] AdjustInventoryRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Inventories == null || request.Inventories.Count == 0)
         {
             return BadRequest("inventories darf nicht leer sein.");
         }
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
@@ -391,10 +394,13 @@ public sealed class ActindoProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePrices(
         [FromBody] JsonElement body,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (body.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             return BadRequest("Payload ist erforderlich.");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,

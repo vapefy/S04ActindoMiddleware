@@ -29,10 +29,13 @@ public sealed class ActindoTransactionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetTransactions(
         [FromBody] GetTransactionsRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request == null)
             return BadRequest("Request payload is required");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Transaction,
