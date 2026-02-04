@@ -81,7 +81,10 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddSingleton<IActindoAvailabilityTracker, ActindoAvailabilityTracker>();
 builder.Services.AddHttpClient<ActindoMiddleware.Infrastructure.Actindo.Auth.IAuthenticationService, ActindoMiddleware.Infrastructure.Actindo.Auth.AuthenticationService>();
-builder.Services.AddHttpClient<ActindoClient>();
+builder.Services.AddHttpClient<ActindoClient>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
 builder.Services.AddHttpClient<ActindoProductListService>();
 builder.Services.AddHttpClient<INavClient, NavClient>();
 builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();

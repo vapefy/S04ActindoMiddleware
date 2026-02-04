@@ -49,10 +49,13 @@ public sealed class ActindoProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CreateProductResponse>> CreateProduct(
         [FromBody] CreateProductRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Product == null)
             return BadRequest("Product payload is missing");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
@@ -226,10 +229,13 @@ public sealed class ActindoProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CreateProductResponse>> SaveProduct(
         [FromBody] SaveProductRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken _)
     {
         if (request?.Product == null)
             return BadRequest("Product payload is missing");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
