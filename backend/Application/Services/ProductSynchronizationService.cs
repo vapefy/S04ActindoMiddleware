@@ -211,30 +211,27 @@ public abstract class ProductSynchronizationService
                 variant.sku,
                 variantProductId);
 
-            if (isNew)
+            var relationPayload = new
             {
-                var relationPayload = new
-                {
-                    variantProduct = new { id = variantProductId },
-                    parentProduct = new { id = masterProductId }
-                };
-                LogEndpointPayload(endpoints.CreateRelation, relationPayload);
-                await _relationLock.WaitAsync(cancellationToken);
-                try
-                {
-                    await _client.PostAsync(
-                        endpoints.CreateRelation,
-                        relationPayload,
-                        cancellationToken);
-                    _logger.LogInformation(
-                        "Variant {Sku} linked to master {MasterId}",
-                        variant.sku,
-                        masterProductId);
-                }
-                finally
-                {
-                    _relationLock.Release();
-                }
+                variantProduct = new { id = variantProductId },
+                parentProduct = new { id = masterProductId }
+            };
+            LogEndpointPayload(endpoints.CreateRelation, relationPayload);
+            await _relationLock.WaitAsync(cancellationToken);
+            try
+            {
+                await _client.PostAsync(
+                    endpoints.CreateRelation,
+                    relationPayload,
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Variant {Sku} linked to master {MasterId}",
+                    variant.sku,
+                    masterProductId);
+            }
+            finally
+            {
+                _relationLock.Release();
             }
 
             foreach (var inventory in variant.Inventory ?? Enumerable.Empty<InventoryDto>())
