@@ -228,10 +228,17 @@
 
 		<!-- NAV API Settings -->
 		<Card class="lg:col-span-2">
-			<h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-				<Globe size={20} />
-				NAV API Einstellungen
-			</h3>
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-semibold flex items-center gap-2">
+					<Globe size={20} />
+					NAV API Einstellungen
+				</h3>
+				{#if navApiUrl && navApiToken}
+					<Badge variant="success">Konfiguriert</Badge>
+				{:else}
+					<Badge variant="warning">Nicht konfiguriert</Badge>
+				{/if}
+			</div>
 
 			<div class="grid sm:grid-cols-2 gap-4">
 				<div>
@@ -241,7 +248,11 @@
 						bind:value={navApiUrl}
 						placeholder="https://notify.schalke04.de/nav/test/navapi"
 					/>
-					<p class="text-xs text-gray-500 mt-1">Endpoint fuer NAV API Aufrufe</p>
+					{#if navApiUrl}
+						<p class="text-xs text-green-500 mt-1">URL gesetzt</p>
+					{:else}
+						<p class="text-xs text-gray-500 mt-1">Endpoint fuer NAV API Aufrufe</p>
+					{/if}
 				</div>
 				<div>
 					<label class="label" for="nav-api-token">NAV API Token</label>
@@ -251,7 +262,11 @@
 						bind:value={navApiToken}
 						placeholder="Bearer Token..."
 					/>
-					<p class="text-xs text-gray-500 mt-1">Bearer Token fuer die Authentifizierung</p>
+					{#if navApiToken}
+						<p class="text-xs text-green-500 mt-1">Token gesetzt ({navApiToken.length} Zeichen)</p>
+					{:else}
+						<p class="text-xs text-gray-500 mt-1">Bearer Token fuer die Authentifizierung</p>
+					{/if}
 				</div>
 			</div>
 		</Card>
