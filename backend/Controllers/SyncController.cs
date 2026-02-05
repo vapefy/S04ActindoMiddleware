@@ -76,16 +76,24 @@ public sealed class SyncController : ControllerBase
             return StatusCode(502, new { error = "Failed to connect to APIs", details = ex.Message });
         }
 
-        // Create lookups
-        var actindoBySku = actindoProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
-        var actindoById = actindoProducts.ToDictionary(p => p.Id.ToString(), StringComparer.OrdinalIgnoreCase);
-        var navBySku = navProducts.ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+        // Create lookups (use GroupBy to handle duplicates - take first occurrence)
+        var actindoBySku = actindoProducts
+            .GroupBy(p => p.Sku, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var actindoById = actindoProducts
+            .GroupBy(p => p.Id.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var navBySku = navProducts
+            .GroupBy(p => p.Sku, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var middlewareBySku = middlewareProducts
             .Where(p => p.VariantStatus != "child") // Only masters and singles
-            .ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(p => p.Sku, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var middlewareChildrenBySku = middlewareProducts
             .Where(p => p.VariantStatus == "child")
-            .ToDictionary(p => p.Sku, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(p => p.Sku, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         // Collect all unique SKUs (excluding children - they'll be nested)
         var allMasterSkus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
