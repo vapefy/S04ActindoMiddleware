@@ -87,6 +87,13 @@ public interface IDashboardMetricsService
         int limit,
         CancellationToken cancellationToken = default);
 
+    Task SaveCustomerAsync(
+        Guid jobId,
+        int actindoCustomerId,
+        string debtorNumber,
+        string name,
+        CancellationToken cancellationToken = default);
+
     Task<DashboardJobRecord?> GetJobAsync(
         Guid jobId,
         CancellationToken cancellationToken = default);
@@ -791,42 +798,73 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT Id,
-                   RequestPayload,
-                   ResponsePayload,
-                   COALESCE(CompletedAt, StartedAt) AS CompletedAt
-            FROM JobEvents
-            WHERE Endpoint IN (@createEndpoint, @saveEndpoint) AND Success = 1
-            ORDER BY COALESCE(CompletedAt, StartedAt) DESC
+            SELECT c.ActindoCustomerId,
+                   c.JobId,
+                   c.DebtorNumber,
+                   c.Name,
+                   c.CreatedAt
+            FROM Customers c
+            ORDER BY c.UpdatedAt DESC
             LIMIT @limit;
             """;
-        command.Parameters.AddWithValue("@createEndpoint", DashboardJobEndpoints.CustomerCreate);
-        command.Parameters.AddWithValue("@saveEndpoint", DashboardJobEndpoints.CustomerSave);
         command.Parameters.AddWithValue("@limit", Math.Max(1, limit));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var requestPayload = reader.GetString(1);
-            var responsePayload = reader.IsDBNull(2) ? null : reader.GetString(2);
-            var completedAt = reader.IsDBNull(3)
-                ? (DateTimeOffset?)null
-                : DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture);
-
-            var (name, debtor) = TryParseCustomerFromRequest(requestPayload);
-            var customerId = TryParseCustomerId(responsePayload);
+            var createdAtStr = reader.IsDBNull(4) ? null : reader.GetString(4);
+            DateTimeOffset? createdAt = null;
+            if (createdAtStr != null && DateTimeOffset.TryParse(createdAtStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            {
+                createdAt = parsed;
+            }
 
             customers.Add(new CustomerListItem
             {
-                JobId = Guid.Parse(reader.GetString(0)),
-                CustomerId = customerId,
-                DebtorNumber = debtor,
-                Name = name,
-                CreatedAt = completedAt
+                JobId = Guid.Parse(reader.GetString(1)),
+                CustomerId = reader.GetInt32(0),
+                DebtorNumber = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Name = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                CreatedAt = createdAt
             });
         }
 
         return customers;
+    }
+
+    public async Task SaveCustomerAsync(
+        Guid jobId,
+        int actindoCustomerId,
+        string debtorNumber,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureDatabase();
+
+        var now = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            INSERT INTO Customers (ActindoCustomerId, JobId, DebtorNumber, Name, CreatedAt, UpdatedAt)
+            VALUES (@actindoCustomerId, @jobId, @debtorNumber, @name, @now, @now)
+            ON CONFLICT(ActindoCustomerId) DO UPDATE SET
+                JobId = excluded.JobId,
+                DebtorNumber = excluded.DebtorNumber,
+                Name = excluded.Name,
+                UpdatedAt = excluded.UpdatedAt;
+            """;
+
+        command.Parameters.AddWithValue("@actindoCustomerId", actindoCustomerId);
+        command.Parameters.AddWithValue("@jobId", jobId.ToString());
+        command.Parameters.AddWithValue("@debtorNumber", debtorNumber ?? string.Empty);
+        command.Parameters.AddWithValue("@name", name ?? string.Empty);
+        command.Parameters.AddWithValue("@now", now);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<DashboardJobRecord?> GetJobAsync(
@@ -1142,6 +1180,31 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
                     ON ProductStocks (Sku);
                 """;
             stocksSkuIndex.ExecuteNonQuery();
+
+            // Customers table for storing created/saved customers
+            using var customersCommand = connection.CreateCommand();
+            customersCommand.CommandText =
+                """
+                CREATE TABLE IF NOT EXISTS Customers
+                (
+                    ActindoCustomerId INTEGER PRIMARY KEY NOT NULL,
+                    JobId TEXT NOT NULL,
+                    DebtorNumber TEXT NOT NULL DEFAULT '',
+                    Name TEXT NOT NULL DEFAULT '',
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    FOREIGN KEY (JobId) REFERENCES JobEvents (Id) ON DELETE CASCADE
+                );
+                """;
+            customersCommand.ExecuteNonQuery();
+
+            using var customersDebtorIndex = connection.CreateCommand();
+            customersDebtorIndex.CommandText =
+                """
+                CREATE INDEX IF NOT EXISTS IX_Customers_DebtorNumber
+                    ON Customers (DebtorNumber);
+                """;
+            customersDebtorIndex.ExecuteNonQuery();
 
             _initialized = true;
         }

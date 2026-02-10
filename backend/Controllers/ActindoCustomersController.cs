@@ -56,6 +56,15 @@ public sealed class ActindoCustomersController : ControllerBase
             var result = await _customerCreateService.CreateAsync(request, cancellationToken);
             success = true;
             responsePayload = DashboardPayloadSerializer.Serialize(result);
+
+            // Save customer to Customers table
+            await _dashboardMetrics.SaveCustomerAsync(
+                jobHandle.Id,
+                result.CustomerId,
+                request.Customer._customer_debitorennumber ?? string.Empty,
+                request.Customer.shortName ?? string.Empty,
+                cancellationToken);
+
             return Created(string.Empty, result);
         }
         catch (Exception ex)
@@ -103,6 +112,15 @@ public sealed class ActindoCustomersController : ControllerBase
             var result = await _customerSaveService.SaveAsync(request, cancellationToken);
             success = true;
             responsePayload = DashboardPayloadSerializer.Serialize(result);
+
+            // Update customer in Customers table (upsert)
+            await _dashboardMetrics.SaveCustomerAsync(
+                jobHandle.Id,
+                result.CustomerId,
+                request.Customer._customer_debitorennumber ?? string.Empty,
+                request.Customer.shortName ?? string.Empty,
+                cancellationToken);
+
             return Ok(result);
         }
         catch (Exception ex)
