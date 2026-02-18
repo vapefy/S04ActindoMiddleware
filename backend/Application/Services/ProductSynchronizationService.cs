@@ -66,13 +66,16 @@ public abstract class ProductSynchronizationService
             useSaveEndpoint ? "Save" : "Create",
             product.sku);
 
-        // Strip variants before sending master to Actindo (variants are handled individually)
+        // Strip variants/inventory before sending master to Actindo (handled individually)
         var variants = product.Variants;
+        var inventory = product.Inventory;
         product.Variants = null;
+        product.Inventory = null;
         var masterPayload = new { product };
         LogEndpointPayload(productEndpoint, masterPayload);
         var masterResponse = await _client.PostAsync(productEndpoint, masterPayload, cancellationToken);
         product.Variants = variants;
+        product.Inventory = inventory;
 
         var masterProductId = ReadProductId(masterResponse);
 

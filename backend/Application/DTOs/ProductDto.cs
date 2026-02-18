@@ -94,7 +94,8 @@ public sealed class ProductDto
     public PimPriceDto? _pim_price_employee { get; set; }
 
     [JsonPropertyName("inventory")]
-    public List<InventoryDto> Inventory { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<InventoryDto>? Inventory { get; set; } = [];
 
     [JsonPropertyName("variants")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
