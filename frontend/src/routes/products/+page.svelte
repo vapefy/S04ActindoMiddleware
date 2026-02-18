@@ -246,12 +246,12 @@
 
 							<!-- Status -->
 							<td class="py-3 px-4">
-								<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
-								{#if isMaster && product.variantCount}
-									<span class="ml-2 text-xs text-gray-500">
-										({product.variantCount} Varianten)
-									</span>
-								{/if}
+								<div class="flex flex-col items-start gap-0.5">
+									<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
+									{#if isMaster && product.variantCount}
+										<span class="text-xs text-gray-500">{product.variantCount} Varianten</span>
+									{/if}
+								</div>
 							</td>
 
 							<!-- Actindo ID -->
@@ -305,7 +305,7 @@
 								<tr class="border-b border-white/5 bg-royal-900/20">
 									<td class="py-2 px-4"></td>
 									<td class="py-2 px-4">
-										<span class="font-mono text-sm text-gray-400 pl-4">
+										<span class="font-mono text-sm text-gray-400 pl-4 whitespace-nowrap">
 											<span class="text-royal-600 mr-1">└</span>
 											{variant.sku}
 										</span>
