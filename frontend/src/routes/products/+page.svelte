@@ -246,12 +246,16 @@
 
 							<!-- Status -->
 							<td class="py-3 px-4">
-								<div class="flex flex-col items-start gap-0.5">
+								{#if isMaster && product.variantCount}
+									<Badge variant={statusBadge.variant} class="text-center leading-tight">
+										<span class="flex flex-col items-center">
+											<span>{statusBadge.label}</span>
+											<span>{product.variantCount} Varianten</span>
+										</span>
+									</Badge>
+								{:else}
 									<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
-									{#if isMaster && product.variantCount}
-										<Badge variant="info">{product.variantCount} Varianten</Badge>
-									{/if}
-								</div>
+								{/if}
 							</td>
 
 							<!-- Actindo ID -->
