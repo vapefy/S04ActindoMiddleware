@@ -362,10 +362,11 @@ public sealed class ActindoProductsController : ControllerBase
             // Speichere Bestandsdaten in DB
             foreach (var item in workItems)
             {
+                var whIdInt = int.TryParse(item.stock.WarehouseId, out var parsedWh) ? parsedWh : 0;
                 await _dashboardMetrics.UpdateProductStockAsync(
                     item.sku,
                     (int)(item.stock.Stock ?? 0),
-                    item.stock.WarehouseId ?? 0,
+                    whIdInt,
                     cancellationToken);
             }
 
@@ -689,10 +690,11 @@ public sealed class ActindoProductsController : ControllerBase
                         if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
                             continue;
 
+                        var whIdInt = int.TryParse(stockEntry.WarehouseId, out var parsedWh) ? parsedWh : 0;
                         await _dashboardMetrics.UpdateProductStockAsync(
                             sku,
                             (int)(stockEntry.Stock ?? 0),
-                            stockEntry.WarehouseId ?? 0,
+                            whIdInt,
                             cancellationToken);
                     }
                 }
@@ -750,11 +752,11 @@ public sealed class ActindoProductsController : ControllerBase
             };
 
             await _actindoClient.PostAsync(endpoint, payload, cancellationToken);
-            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? 0, Success = true });
+            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? string.Empty, Success = true });
         }
         catch (Exception ex)
         {
-            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? 0, Success = false, Error = ex.Message });
+            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? string.Empty, Success = false, Error = ex.Message });
         }
         finally
         {
@@ -787,7 +789,7 @@ public sealed class VariantSyncResultItem
 public sealed class InventoryUpdateResultItem
 {
     public string Sku { get; set; } = string.Empty;
-    public int WarehouseId { get; set; }
+    public string WarehouseId { get; set; } = string.Empty;
     public bool Success { get; set; }
     public string? Error { get; set; }
 }

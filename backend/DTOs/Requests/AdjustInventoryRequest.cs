@@ -18,7 +18,7 @@ public sealed class InventoryEntry
 public sealed class InventoryStock
 {
     [JsonPropertyName("warehouse_id")]
-    public int? WarehouseId { get; set; }
+    public string? WarehouseId { get; set; }
 
     [JsonPropertyName("stock")]
     public decimal? Stock { get; set; }
