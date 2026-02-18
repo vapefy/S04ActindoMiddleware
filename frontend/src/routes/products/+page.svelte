@@ -249,7 +249,7 @@
 								<div class="flex flex-col items-start gap-0.5">
 									<Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
 									{#if isMaster && product.variantCount}
-										<span class="text-xs text-gray-500">{product.variantCount} Varianten</span>
+										<Badge variant="info">{product.variantCount} Varianten</Badge>
 									{/if}
 								</div>
 							</td>
