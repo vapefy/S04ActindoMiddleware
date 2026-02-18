@@ -97,7 +97,8 @@ public sealed class ProductDto
     public List<InventoryDto> Inventory { get; set; } = [];
 
     [JsonPropertyName("variants")]
-    public List<ProductDto> Variants { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProductDto>? Variants { get; set; } = [];
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
