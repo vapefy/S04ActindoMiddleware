@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Save, RefreshCw, Trash2, Settings as SettingsIcon, Key, Link, Globe } from 'lucide-svelte';
+	import { Save, RefreshCw, Trash2, Settings as SettingsIcon, Key, Link, Globe, Warehouse, Plus, X } from 'lucide-svelte';
 	import { settings as settingsApi } from '$api/client';
 	import type { ActindoSettings } from '$api/types';
 	import { permissions } from '$stores/auth';
@@ -31,6 +31,9 @@
 	let endpoints: Record<string, string> = $state({});
 	let navApiUrl = $state('');
 	let navApiToken = $state('');
+	let warehouseMappings: Record<string, number> = $state({});
+	let newWarehouseName = $state('');
+	let newWarehouseIdInput = $state('');
 
 	onMount(() => {
 		if (!perms.isAdmin) {
@@ -54,6 +57,7 @@
 			endpoints = { ...data.endpoints };
 			navApiUrl = data.navApiUrl ?? '';
 			navApiToken = data.navApiToken ?? '';
+		warehouseMappings = { ...data.warehouseMappings };
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Fehler beim Laden';
 		} finally {
@@ -76,7 +80,8 @@
 				refreshToken: refreshToken || null,
 				endpoints,
 				navApiUrl: navApiUrl || null,
-				navApiToken: navApiToken || null
+				navApiToken: navApiToken || null,
+				warehouseMappings
 			});
 			success = 'Einstellungen gespeichert';
 			loadSettings();
@@ -102,6 +107,20 @@
 
 	function updateEndpoint(key: string, value: string) {
 		endpoints = { ...endpoints, [key]: value };
+	}
+
+	function addWarehouseMapping() {
+		const name = newWarehouseName.trim();
+		const id = parseInt(newWarehouseIdInput.trim(), 10);
+		if (!name || isNaN(id)) return;
+		warehouseMappings = { ...warehouseMappings, [name]: id };
+		newWarehouseName = '';
+		newWarehouseIdInput = '';
+	}
+
+	function removeWarehouseMapping(name: string) {
+		const { [name]: _, ...rest } = warehouseMappings;
+		warehouseMappings = rest;
 	}
 </script>
 
@@ -291,6 +310,57 @@
 					</div>
 				{/each}
 			</div>
+		</Card>
+
+		<!-- Lager-Konfiguration -->
+	<Card class="lg:col-span-2">
+		<h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+			<Warehouse size={20} />
+			Lager-Konfiguration
+		</h3>
+		<p class="text-sm text-gray-400 mb-4">Lager-Namen auf Actindo Warehouse-IDs mappen. Wird fuer Bestandsupdates benoetigt.</p>
+
+		{#if Object.keys(warehouseMappings).length > 0}
+			<table class="w-full mb-4">
+				<thead>
+					<tr class="border-b border-white/10">
+						<th class="text-left py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">Lager-Name</th>
+						<th class="text-left py-2 text-xs uppercase tracking-wider text-gray-400 font-medium">Actindo ID</th>
+						<th class="w-10"></th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each Object.entries(warehouseMappings) as [name, id]}
+						<tr class="border-b border-white/5">
+							<td class="py-2 font-mono text-sm">{name}</td>
+							<td class="py-2 font-mono text-sm text-royal-300">{id}</td>
+							<td class="py-2">
+								<button type="button" onclick={() => removeWarehouseMapping(name)} class="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors">
+									<X size={14} />
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{:else}
+			<p class="text-sm text-gray-500 mb-4">Noch keine Mappings konfiguriert.</p>
+		{/if}
+
+		<div class="flex gap-2 items-end">
+			<div class="flex-1">
+				<label class="label" for="new-wh-name">Lager-Name</label>
+				<Input id="new-wh-name" bind:value={newWarehouseName} placeholder="z.B. GE-City" />
+			</div>
+			<div class="w-36">
+				<label class="label" for="new-wh-id">Actindo ID</label>
+				<Input id="new-wh-id" bind:value={newWarehouseIdInput} placeholder="z.B. 20" />
+			</div>
+			<Button variant="ghost" onclick={addWarehouseMapping}>
+				<Plus size={16} />
+				Hinzufuegen
+			</Button>
+		</div>
 		</Card>
 	</div>
 

@@ -161,6 +161,7 @@ export interface ActindoSettings {
 	endpoints: Record<string, string>;
 	navApiUrl: string | null;
 	navApiToken: string | null;
+	warehouseMappings: Record<string, number>;
 }
 
 // Sync Types

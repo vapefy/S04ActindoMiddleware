@@ -24,6 +24,7 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly IDashboardMetricsService _dashboardMetrics;
     private readonly ActindoClient _actindoClient;
     private readonly IActindoEndpointProvider _endpointProvider;
+    private readonly ISettingsStore _settingsStore;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> InventoryLocks = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxConcurrentInventoryPosts = 8;
 
@@ -32,13 +33,15 @@ public sealed class ActindoProductsController : ControllerBase
         ProductSaveService productSaveService,
         IDashboardMetricsService dashboardMetrics,
         ActindoClient actindoClient,
-        IActindoEndpointProvider endpointProvider)
+        IActindoEndpointProvider endpointProvider,
+        ISettingsStore settingsStore)
     {
         _productCreateService = productCreateService;
         _productSaveService = productSaveService;
         _dashboardMetrics = dashboardMetrics;
         _actindoClient = actindoClient;
         _endpointProvider = endpointProvider;
+        _settingsStore = settingsStore;
     }
 
     /// <summary>
@@ -301,8 +304,9 @@ public sealed class ActindoProductsController : ControllerBase
         try
         {
             var endpoints = await _endpointProvider.GetAsync(cancellationToken);
-            var results = new ConcurrentBag<object>();
-            var workItems = new List<(string sku, InventoryStock stock)>();
+            var mappings = (await _settingsStore.GetActindoSettingsAsync(cancellationToken)).WarehouseMappings;
+            var results = new ConcurrentBag<InventoryUpdateResultItem>();
+            var workItems = new List<(string sku, InventoryStock stock, int warehouseId)>();
 
             foreach (var kvp in request.Inventories)
             {
@@ -315,7 +319,20 @@ public sealed class ActindoProductsController : ControllerBase
                 {
                     if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
                         continue;
-                    workItems.Add((sku, stockEntry));
+
+                    if (!mappings.TryGetValue(stockEntry.WarehouseId, out var warehouseId))
+                    {
+                        results.Add(new InventoryUpdateResultItem
+                        {
+                            Sku = sku,
+                            WarehouseId = stockEntry.WarehouseId,
+                            Success = false,
+                            Error = $"Lager '{stockEntry.WarehouseId}' ist nicht gemappt. Bitte in den Einstellungen unter 'Lager-Konfiguration' eintragen."
+                        });
+                        continue;
+                    }
+
+                    workItems.Add((sku, stockEntry, warehouseId));
                 }
             }
 
@@ -323,7 +340,7 @@ public sealed class ActindoProductsController : ControllerBase
             var tasks = workItems.Select(async item =>
             {
                 await throttler.WaitAsync(cancellationToken);
-                var key = $"wh:{item.stock.WarehouseId}";
+                var key = $"wh:{item.warehouseId}";
                 var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
                 await sem.WaitAsync(cancellationToken);
                 try
@@ -336,7 +353,7 @@ public sealed class ActindoProductsController : ControllerBase
                             synchronousSync = true,
                             compareOldValue = true,
                             _fulfillment_inventory_amount = item.stock.Stock,
-                            _fulfillment_inventory_warehouse = item.stock.WarehouseId,
+                            _fulfillment_inventory_warehouse = item.warehouseId,
                             _fulfillment_inventory_compartment = 111,
                             _fulfillment_inventory_postingType = new[] { new { id = 571 } },
                             _fulfillment_inventory_postingText = "Bestandseinbuchung",
@@ -344,11 +361,12 @@ public sealed class ActindoProductsController : ControllerBase
                         }
                     };
 
-                    var result = await _actindoClient.PostAsync(
-                        endpoints.CreateInventory,
-                        payload,
-                        cancellationToken);
-                    results.Add(new { sku = item.sku, warehouseId = item.stock.WarehouseId, response = result });
+                    await _actindoClient.PostAsync(endpoints.CreateInventory, payload, cancellationToken);
+                    results.Add(new InventoryUpdateResultItem { Sku = item.sku, WarehouseId = item.stock.WarehouseId ?? string.Empty, Success = true });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new InventoryUpdateResultItem { Sku = item.sku, WarehouseId = item.stock.WarehouseId ?? string.Empty, Success = false, Error = ex.Message });
                 }
                 finally
                 {
@@ -362,11 +380,10 @@ public sealed class ActindoProductsController : ControllerBase
             // Speichere Bestandsdaten in DB
             foreach (var item in workItems)
             {
-                var whIdInt = int.TryParse(item.stock.WarehouseId, out var parsedWh) ? parsedWh : 0;
                 await _dashboardMetrics.UpdateProductStockAsync(
                     item.sku,
                     (int)(item.stock.Stock ?? 0),
-                    whIdInt,
+                    item.warehouseId,
                     cancellationToken);
             }
 
@@ -651,8 +668,10 @@ public sealed class ActindoProductsController : ControllerBase
             // Step 3: Process inventories if present
             if (request.Inventories != null && request.Inventories.Count > 0)
             {
+                var mappings = (await _settingsStore.GetActindoSettingsAsync(cancellationToken)).WarehouseMappings;
                 var inventoryThrottler = new SemaphoreSlim(MaxConcurrentInventoryPosts);
                 var inventoryTasks = new List<Task>();
+                var inventoryWorkItems = new List<(string sku, InventoryStock stock, int warehouseId)>();
 
                 foreach (var kvp in request.Inventories)
                 {
@@ -666,9 +685,23 @@ public sealed class ActindoProductsController : ControllerBase
                         if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
                             continue;
 
+                        if (!mappings.TryGetValue(stockEntry.WarehouseId, out var warehouseId))
+                        {
+                            results.InventoryUpdates.Add(new InventoryUpdateResultItem
+                            {
+                                Sku = sku,
+                                WarehouseId = stockEntry.WarehouseId,
+                                Success = false,
+                                Error = $"Lager '{stockEntry.WarehouseId}' ist nicht gemappt. Bitte in den Einstellungen unter 'Lager-Konfiguration' eintragen."
+                            });
+                            continue;
+                        }
+
+                        inventoryWorkItems.Add((sku, stockEntry, warehouseId));
                         inventoryTasks.Add(PostInventoryAsync(
                             sku,
                             stockEntry,
+                            warehouseId,
                             endpoints.CreateInventory,
                             inventoryThrottler,
                             results.InventoryUpdates,
@@ -679,24 +712,13 @@ public sealed class ActindoProductsController : ControllerBase
                 await Task.WhenAll(inventoryTasks);
 
                 // Save stock data to DB
-                foreach (var kvp in request.Inventories)
+                foreach (var item in inventoryWorkItems)
                 {
-                    var sku = kvp.Key;
-                    var entry = kvp.Value;
-                    if (entry?.Stocks == null) continue;
-
-                    foreach (var stockEntry in entry.Stocks)
-                    {
-                        if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
-                            continue;
-
-                        var whIdInt = int.TryParse(stockEntry.WarehouseId, out var parsedWh) ? parsedWh : 0;
-                        await _dashboardMetrics.UpdateProductStockAsync(
-                            sku,
-                            (int)(stockEntry.Stock ?? 0),
-                            whIdInt,
-                            cancellationToken);
-                    }
+                    await _dashboardMetrics.UpdateProductStockAsync(
+                        item.sku,
+                        (int)(item.stock.Stock ?? 0),
+                        item.warehouseId,
+                        cancellationToken);
                 }
             }
 
@@ -724,13 +746,14 @@ public sealed class ActindoProductsController : ControllerBase
     private async Task PostInventoryAsync(
         string sku,
         InventoryStock stock,
+        int warehouseId,
         string endpoint,
         SemaphoreSlim throttler,
         ConcurrentBag<InventoryUpdateResultItem> results,
         CancellationToken cancellationToken)
     {
         await throttler.WaitAsync(cancellationToken);
-        var key = $"wh:{stock.WarehouseId}";
+        var key = $"wh:{warehouseId}";
         var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         await sem.WaitAsync(cancellationToken);
         try
@@ -743,7 +766,7 @@ public sealed class ActindoProductsController : ControllerBase
                     synchronousSync = true,
                     compareOldValue = true,
                     _fulfillment_inventory_amount = stock.Stock,
-                    _fulfillment_inventory_warehouse = stock.WarehouseId,
+                    _fulfillment_inventory_warehouse = warehouseId,
                     _fulfillment_inventory_compartment = 111,
                     _fulfillment_inventory_postingType = new[] { new { id = 571 } },
                     _fulfillment_inventory_postingText = "Bestandseinbuchung",

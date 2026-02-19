@@ -16,5 +16,8 @@ public sealed class ActindoSettingsDto
     // NAV API settings
     public string? NavApiUrl { get; init; }
     public string? NavApiToken { get; init; }
+
+    // Warehouse name → Actindo ID mappings
+    public Dictionary<string, int> WarehouseMappings { get; init; } = new();
 }
 
