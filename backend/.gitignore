@@ -1,7 +1,8 @@
 # Build outputs
 bin/
 obj/
-App_Data/
+App_Data/*
+!App_Data/.gitkeep
 
 # User-specific / tooling
 .idea/

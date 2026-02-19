@@ -36,6 +36,7 @@ public sealed class SqliteSettingsStore : ISettingsStore
         _connectionString = BuildConnectionString(
             configuration.GetConnectionString("Dashboard"),
             hostEnvironment.ContentRootPath);
+        _logger.LogInformation("SQLite settings database: {ConnectionString}", _connectionString);
     }
 
     public async Task<ActindoSettings> GetActindoSettingsAsync(CancellationToken cancellationToken = default)
