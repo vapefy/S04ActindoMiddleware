@@ -537,7 +537,7 @@ public sealed class ActindoProductsController : ControllerBase
         if (request.Product.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             return BadRequest("Product payload is missing");
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
         var cancellationToken = cts.Token;
 
         var jobHandle = await _dashboardMetrics.BeginJobAsync(
@@ -598,14 +598,14 @@ public sealed class ActindoProductsController : ControllerBase
             results.MasterSku = masterSku;
             results.MasterOperation = hasId ? "saved" : "created";
 
-            // Step 2: Process variants if present
+            // Step 2: Process variants in parallel
             if (variantsNode is JsonArray variantsArray && variantsArray.Count > 0)
             {
-                foreach (var variantNode in variantsArray)
-                {
-                    if (variantNode is not JsonObject variantObj)
-                        continue;
-
+                using var variantSemaphore = new SemaphoreSlim(5);
+                var variantTasks = variantsArray
+                    .OfType<JsonObject>()
+                    .Select(async variantObj =>
+                    {
                     var variantSku = variantObj["sku"]?.ToString() ?? string.Empty;
                     var variantHasId = variantObj.ContainsKey("id") &&
                                        variantObj["id"] is not null &&
@@ -613,6 +613,7 @@ public sealed class ActindoProductsController : ControllerBase
 
                     var variantEndpoint = variantHasId ? endpoints.SaveProduct : endpoints.CreateProduct;
 
+                    await variantSemaphore.WaitAsync(cancellationToken);
                     try
                     {
                         var variantPayload = new { product = variantObj };
@@ -662,7 +663,13 @@ public sealed class ActindoProductsController : ControllerBase
                             Error = ex.Message
                         });
                     }
-                }
+                    finally
+                    {
+                        variantSemaphore.Release();
+                    }
+                }).ToArray();
+
+                await Task.WhenAll(variantTasks);
             }
 
             // Step 3: Process inventories if present

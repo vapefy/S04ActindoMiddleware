@@ -83,7 +83,7 @@ builder.Services.AddSingleton<IActindoAvailabilityTracker, ActindoAvailabilityTr
 builder.Services.AddHttpClient<ActindoMiddleware.Infrastructure.Actindo.Auth.IAuthenticationService, ActindoMiddleware.Infrastructure.Actindo.Auth.AuthenticationService>();
 builder.Services.AddHttpClient<ActindoClient>(client =>
 {
-    client.Timeout = TimeSpan.FromMinutes(5);
+    client.Timeout = TimeSpan.FromMinutes(30);
 });
 builder.Services.AddHttpClient<ActindoProductListService>();
 builder.Services.AddHttpClient<INavClient, NavClient>();
