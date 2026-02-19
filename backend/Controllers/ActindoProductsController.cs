@@ -646,9 +646,12 @@ public sealed class ActindoProductsController : ControllerBase
                             throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
                         }
 
-                        // If variant was created (not saved), link it to master via ChangeMasterVariant
+                        // If variant was created (not saved), link it to master via ChangeMasterVariant.
+                        // Wait briefly so Actindo's DB transaction from the create call has time to commit
+                        // before we issue the UPDATE on the same row (avoids MySQL lock wait timeout).
                         if (!variantHasId)
                         {
+                            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                             var relationPayload = new
                             {
                                 variantProduct = new { id = variantProductId },
