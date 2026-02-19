@@ -52,22 +52,25 @@ public sealed class ProductImageService
             await Task.Delay(100, cancellationToken);
         }
 
-        _logger.LogInformation("Relating {Count} images to product {ProductId}", request.Paths.Count, request.Id);
+        if (request.Paths.Count > 0)
+        {
+            _logger.LogInformation("Relating {Count} images to product {ProductId}", request.Paths.Count, request.Id);
 
-        await _client.PostAsync(
-            endpoints.ProductFilesSave,
-            new
-            {
-                product = new
+            await _client.PostAsync(
+                endpoints.ProductFilesSave,
+                new
                 {
-                    id = request.Id,
-                    _pim_images = new
+                    product = new
                     {
-                        images = request.Paths.Select(path => new { id = path.Id }).ToArray()
+                        id = request.Id,
+                        _pim_images = new
+                        {
+                            images = request.Paths.Select(path => new { id = path.Id }).ToArray()
+                        }
                     }
-                }
-            },
-            cancellationToken);
+                },
+                cancellationToken);
+        }
 
         return new CreateProductResponse
         {
