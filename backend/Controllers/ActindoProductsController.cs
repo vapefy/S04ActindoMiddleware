@@ -609,14 +609,11 @@ public sealed class ActindoProductsController : ControllerBase
             results.MasterSku = masterSku;
             results.MasterOperation = hasId ? "saved" : "created";
 
-            // Step 2: Process variants in parallel
+            // Step 2: Process variants sequentially: create/save → changeVariantMaster
             if (variantsNode is JsonArray variantsArray && variantsArray.Count > 0)
             {
-                using var variantSemaphore = new SemaphoreSlim(5);
-                var variantTasks = variantsArray
-                    .OfType<JsonObject>()
-                    .Select(async variantObj =>
-                    {
+                foreach (var variantObj in variantsArray.OfType<JsonObject>())
+                {
                     var variantSku = variantObj["sku"]?.ToString() ?? string.Empty;
                     var variantHasId = variantObj.ContainsKey("id") &&
                                        variantObj["id"] is not null &&
@@ -624,7 +621,6 @@ public sealed class ActindoProductsController : ControllerBase
 
                     var variantEndpoint = variantHasId ? endpoints.SaveProduct : endpoints.CreateProduct;
 
-                    await variantSemaphore.WaitAsync(cancellationToken);
                     try
                     {
                         var variantPayload = new { product = variantObj };
@@ -646,12 +642,8 @@ public sealed class ActindoProductsController : ControllerBase
                             throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
                         }
 
-                        // If variant was created (not saved), link it to master via ChangeMasterVariant.
-                        // Wait briefly so Actindo's DB transaction from the create call has time to commit
-                        // before we issue the UPDATE on the same row (avoids MySQL lock wait timeout).
                         if (!variantHasId)
                         {
-                            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                             var relationPayload = new
                             {
                                 variantProduct = new { id = variantProductId },
@@ -677,22 +669,13 @@ public sealed class ActindoProductsController : ControllerBase
                             Error = ex.Message
                         });
                     }
-                    finally
-                    {
-                        variantSemaphore.Release();
-                    }
-                }).ToArray();
-
-                await Task.WhenAll(variantTasks);
+                }
             }
 
-            // Step 3: Process inventories if present
+            // Step 3: Process inventories sequentially
             if (request.Inventories != null && request.Inventories.Count > 0)
             {
                 var mappings = (await _settingsStore.GetActindoSettingsAsync(cancellationToken)).WarehouseMappings;
-                var inventoryThrottler = new SemaphoreSlim(MaxConcurrentInventoryPosts);
-                var inventoryTasks = new List<Task>();
-                var inventoryWorkItems = new List<(string sku, InventoryStock stock, int warehouseId)>();
 
                 foreach (var kvp in request.Inventories)
                 {
@@ -718,28 +701,33 @@ public sealed class ActindoProductsController : ControllerBase
                             continue;
                         }
 
-                        inventoryWorkItems.Add((sku, stockEntry, warehouseId));
-                        inventoryTasks.Add(PostInventoryAsync(
-                            sku,
-                            stockEntry,
-                            warehouseId,
-                            endpoints.CreateInventory,
-                            inventoryThrottler,
-                            results.InventoryUpdates,
-                            cancellationToken));
+                        var payload = new
+                        {
+                            inventory = new
+                            {
+                                sku,
+                                synchronousSync = true,
+                                compareOldValue = true,
+                                _fulfillment_inventory_amount = stockEntry.Stock,
+                                _fulfillment_inventory_warehouse = warehouseId,
+                                _fulfillment_inventory_compartment = 111,
+                                _fulfillment_inventory_postingType = new[] { new { id = 571 } },
+                                _fulfillment_inventory_postingText = "Bestandseinbuchung",
+                                _fulfillment_inventory_origin = "Middleware import"
+                            }
+                        };
+
+                        try
+                        {
+                            await _actindoClient.PostAsync(endpoints.CreateInventory, payload, cancellationToken);
+                            await _dashboardMetrics.UpdateProductStockAsync(sku, (int)(stockEntry.Stock ?? 0), warehouseId, cancellationToken);
+                            results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = true });
+                        }
+                        catch (Exception ex)
+                        {
+                            results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = false, Error = ex.Message });
+                        }
                     }
-                }
-
-                await Task.WhenAll(inventoryTasks);
-
-                // Save stock data to DB
-                foreach (var item in inventoryWorkItems)
-                {
-                    await _dashboardMetrics.UpdateProductStockAsync(
-                        item.sku,
-                        (int)(item.stock.Stock ?? 0),
-                        item.warehouseId,
-                        cancellationToken);
                 }
             }
 
@@ -765,50 +753,6 @@ public sealed class ActindoProductsController : ControllerBase
         }
     }
 
-    private async Task PostInventoryAsync(
-        string sku,
-        InventoryStock stock,
-        int warehouseId,
-        string endpoint,
-        SemaphoreSlim throttler,
-        ConcurrentBag<InventoryUpdateResultItem> results,
-        CancellationToken cancellationToken)
-    {
-        await throttler.WaitAsync(cancellationToken);
-        var key = $"wh:{warehouseId}";
-        var sem = InventoryLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-        await sem.WaitAsync(cancellationToken);
-        try
-        {
-            var payload = new
-            {
-                inventory = new
-                {
-                    sku,
-                    synchronousSync = true,
-                    compareOldValue = true,
-                    _fulfillment_inventory_amount = stock.Stock,
-                    _fulfillment_inventory_warehouse = warehouseId,
-                    _fulfillment_inventory_compartment = 111,
-                    _fulfillment_inventory_postingType = new[] { new { id = 571 } },
-                    _fulfillment_inventory_postingText = "Bestandseinbuchung",
-                    _fulfillment_inventory_origin = "Middleware import"
-                }
-            };
-
-            await _actindoClient.PostAsync(endpoint, payload, cancellationToken);
-            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? string.Empty, Success = true });
-        }
-        catch (Exception ex)
-        {
-            results.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stock.WarehouseId ?? string.Empty, Success = false, Error = ex.Message });
-        }
-        finally
-        {
-            sem.Release();
-            throttler.Release();
-        }
-    }
 }
 
 public sealed class FullProductSyncResult
