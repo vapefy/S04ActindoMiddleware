@@ -142,7 +142,8 @@ CREATE TABLE IF NOT EXISTS Settings (
             ClientSecret = source.ClientSecret,
             Endpoints = MergeWithDefaults(source.Endpoints),
             NavApiUrl = source.NavApiUrl,
-            NavApiToken = source.NavApiToken
+            NavApiToken = source.NavApiToken,
+            WarehouseMappings = source.WarehouseMappings ?? new()
         };
     }
 

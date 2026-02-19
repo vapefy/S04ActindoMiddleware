@@ -50,7 +50,8 @@ public sealed class SettingsController : ControllerBase
             ClientSecret = settings.ClientSecret,
             Endpoints = settings.Endpoints ?? new(),
             NavApiUrl = settings.NavApiUrl,
-            NavApiToken = settings.NavApiToken
+            NavApiToken = settings.NavApiToken,
+            WarehouseMappings = settings.WarehouseMappings ?? new()
         });
     }
 
@@ -73,7 +74,8 @@ public sealed class SettingsController : ControllerBase
             ClientSecret = payload.ClientSecret,
             Endpoints = payload.Endpoints ?? new(),
             NavApiUrl = payload.NavApiUrl,
-            NavApiToken = payload.NavApiToken
+            NavApiToken = payload.NavApiToken,
+            WarehouseMappings = payload.WarehouseMappings ?? new()
         };
 
         await _settingsStore.SaveActindoSettingsAsync(toSave, cancellationToken);
