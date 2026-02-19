@@ -26,6 +26,7 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly IActindoEndpointProvider _endpointProvider;
     private readonly ISettingsStore _settingsStore;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> InventoryLocks = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProductLocks = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxConcurrentInventoryPosts = 8;
 
     public ActindoProductsController(
@@ -71,6 +72,8 @@ public sealed class ActindoProductsController : ControllerBase
         var success = false;
         string? responsePayload = null;
         string? errorPayload = null;
+        var createProductLock = ProductLocks.GetOrAdd(request.Product.sku, _ => new SemaphoreSlim(1, 1));
+        await createProductLock.WaitAsync(cancellationToken);
         try
         {
             var result = await _productCreateService.CreateAsync(request, cancellationToken);
@@ -125,6 +128,7 @@ public sealed class ActindoProductsController : ControllerBase
         }
         finally
         {
+            createProductLock.Release();
             await _dashboardMetrics.CompleteJobAsync(
                 jobHandle,
                 success,
@@ -251,6 +255,8 @@ public sealed class ActindoProductsController : ControllerBase
         var success = false;
         string? responsePayload = null;
         string? errorPayload = null;
+        var saveProductLock = ProductLocks.GetOrAdd(request.Product.sku, _ => new SemaphoreSlim(1, 1));
+        await saveProductLock.WaitAsync(cancellationToken);
         try
         {
             var result = await _productSaveService.SaveAsync(request, cancellationToken);
@@ -265,6 +271,7 @@ public sealed class ActindoProductsController : ControllerBase
         }
         finally
         {
+            saveProductLock.Release();
             await _dashboardMetrics.CompleteJobAsync(
                 jobHandle,
                 success,
@@ -551,6 +558,7 @@ public sealed class ActindoProductsController : ControllerBase
         var success = false;
         string? responsePayload = null;
         string? errorPayload = null;
+        SemaphoreSlim? fullSyncLock = null;
 
         try
         {
@@ -573,6 +581,9 @@ public sealed class ActindoProductsController : ControllerBase
 
             var masterEndpoint = hasId ? endpoints.SaveProduct : endpoints.CreateProduct;
             var masterSku = productObj["sku"]?.ToString() ?? string.Empty;
+
+            fullSyncLock = ProductLocks.GetOrAdd(masterSku, _ => new SemaphoreSlim(1, 1));
+            await fullSyncLock.WaitAsync(cancellationToken);
 
             // Step 1: Create/Save master product
             var masterPayload = new { product = productObj };
@@ -740,6 +751,7 @@ public sealed class ActindoProductsController : ControllerBase
         }
         finally
         {
+            fullSyncLock?.Release();
             await _dashboardMetrics.CompleteJobAsync(
                 jobHandle,
                 success,
