@@ -60,12 +60,12 @@ public sealed class ActindoClient
             if (!response.IsSuccessStatusCode)
             {
                 var actindoError = TryExtractActindoErrorMessage(responseContent) ?? responseContent;
-                var errorMessage = $"Actindo-Fehler {(int)response.StatusCode} ({endpoint}): {actindoError}";
+                var ex = new InvalidOperationException($"Actindo-Fehler {(int)response.StatusCode} ({endpoint}): {actindoError}");
 
-                _availabilityTracker.ReportFailure(null);
                 _logger.LogError("Actindo request to {Endpoint} failed with {StatusCode}: {Response}", endpoint, (int)response.StatusCode, responseContent);
+                _availabilityTracker.ReportFailure(ex);
                 await AppendActindoLogAsync(endpoint, serializedPayload, responseContent, false, cancellationToken);
-                throw new InvalidOperationException(errorMessage);
+                throw ex;
             }
 
             _availabilityTracker.ReportSuccess();
