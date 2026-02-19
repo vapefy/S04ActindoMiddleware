@@ -57,18 +57,26 @@ public sealed class ActindoClient
                 endpoint,
                 responseContent);
 
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var actindoError = TryExtractActindoErrorMessage(responseContent) ?? responseContent;
+                var errorMessage = $"Actindo-Fehler {(int)response.StatusCode} ({endpoint}): {actindoError}";
+
+                _availabilityTracker.ReportFailure(null);
+                _logger.LogError("Actindo request to {Endpoint} failed with {StatusCode}: {Response}", endpoint, (int)response.StatusCode, responseContent);
+                await AppendActindoLogAsync(endpoint, serializedPayload, responseContent, false, cancellationToken);
+                throw new InvalidOperationException(errorMessage);
+            }
 
             _availabilityTracker.ReportSuccess();
-            await AppendActindoLogAsync(
-                endpoint,
-                serializedPayload,
-                responseContent,
-                true,
-                cancellationToken);
+            await AppendActindoLogAsync(endpoint, serializedPayload, responseContent, true, cancellationToken);
 
             using var document = JsonDocument.Parse(responseContent);
             return document.RootElement.Clone();
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -82,6 +90,18 @@ public sealed class ActindoClient
                 cancellationToken);
             throw;
         }
+    }
+
+    private static string? TryExtractActindoErrorMessage(string responseContent)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseContent);
+            if (doc.RootElement.TryGetProperty("error", out var errorProp))
+                return errorProp.GetString();
+        }
+        catch { }
+        return null;
     }
 
     private async Task AppendActindoLogAsync(
