@@ -81,7 +81,7 @@ docker compose -f "$COMPOSE_FILE" down
 # Step 2: Git pull (optional)
 if [[ "$DO_PULL" == true ]]; then
     echo "[2/4] Pulling latest changes..."
-    git pull
+    git fetch && git reset --hard FETCH_HEAD
 else
     echo "[2/4] Skipping git pull"
 fi
