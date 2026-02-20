@@ -29,6 +29,7 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly ProductJobQueue _jobQueue;
     private readonly NavCallbackService _navCallback;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ActindoProductsController> _logger;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> InventoryLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProductLocks = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxConcurrentInventoryPosts = 8;
@@ -42,7 +43,8 @@ public sealed class ActindoProductsController : ControllerBase
         ISettingsStore settingsStore,
         ProductJobQueue jobQueue,
         NavCallbackService navCallback,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        ILogger<ActindoProductsController> logger)
     {
         _productCreateService = productCreateService;
         _productSaveService = productSaveService;
@@ -53,6 +55,7 @@ public sealed class ActindoProductsController : ControllerBase
         _jobQueue = jobQueue;
         _navCallback = navCallback;
         _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     [HttpGet("active-jobs")]
@@ -660,8 +663,14 @@ public sealed class ActindoProductsController : ControllerBase
         [FromBody] FullProductRequest request,
         CancellationToken _)
     {
+        _logger.LogInformation("FullProductSync: ProductValueKind={Kind} Await={Await} BufferId={BufferId}",
+            request.Product.ValueKind, request.Await, request.BufferId);
+
         if (request.Product.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            _logger.LogWarning("FullProductSync 400: Product payload is missing (ValueKind={Kind})", request.Product.ValueKind);
             return BadRequest("Product payload is missing");
+        }
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
         var cancellationToken = cts.Token;
@@ -672,13 +681,20 @@ public sealed class ActindoProductsController : ControllerBase
         // Quick parse to extract masterSku for lock key and job info
         var quickNode = JsonNode.Parse(rawProduct) as JsonObject;
         if (quickNode is null)
+        {
+            _logger.LogWarning("FullProductSync 400: Product is not a JSON object");
             return BadRequest("Product must be a JSON object");
+        }
         var masterSku = quickNode["sku"]?.ToString() ?? string.Empty;
 
         if (!request.Await)
         {
             var navError = await ValidateNavSettingsForAsync(cancellationToken);
-            if (navError != null) return navError;
+            if (navError != null)
+            {
+                _logger.LogWarning("FullProductSync 400: NAV settings not configured for async mode");
+                return navError;
+            }
 
             var capturedInventories = request.Inventories;
             var capturedBufferId = request.BufferId;
