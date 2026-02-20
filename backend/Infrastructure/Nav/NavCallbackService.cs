@@ -80,6 +80,7 @@ public sealed class NavCallbackService
                 dict[prop.Name] = prop.Value;
         }
 
+        dict["requestType"] = "actindo.product.response";
         dict["sku"] = sku;
         dict["bufferId"] = bufferId;
 
