@@ -53,11 +53,11 @@ public sealed class NavCallbackService
             var tokenPreview = settings.NavApiToken!.Length > 8
                 ? settings.NavApiToken[..8] + "..."
                 : "(short)";
+            var payloadJson = JsonSerializer.Serialize(payload, SerializerOptions);
             _logger.LogInformation(
-                "NAV callback: POST {Url} | Token starts with: {TokenPreview} | Payload keys: {Keys}",
-                settings.NavApiUrl,
-                tokenPreview,
-                string.Join(", ", ((System.Collections.Generic.Dictionary<string, object?>)payload).Keys));
+                "NAV callback: POST {Url} | Token starts with: {TokenPreview}",
+                settings.NavApiUrl, tokenPreview);
+            _logger.LogInformation("NAV callback body: {Body}", payloadJson);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, settings.NavApiUrl);
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.NavApiToken);
