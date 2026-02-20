@@ -626,11 +626,12 @@ public sealed class ActindoProductsController : ControllerBase
                         var isIndi = variantObj["_pim_varcode"]?.ToString()
                             ?.Contains("INDI", StringComparison.OrdinalIgnoreCase) == true;
 
-                        // INDI-Artikel: flock-Felder leeren
+                        // INDI-Artikel: als master anlegen, flock-Felder leeren
                         if (isIndi)
                         {
-                            variantObj["_pim_flock_name"] = "";
-                            variantObj["_pim_flock_number"] = "";
+                            variantObj["variantStatus"] = JsonValue.Create("master");
+                            variantObj["_pim_flock_name"] = JsonValue.Create("");
+                            variantObj["_pim_flock_number"] = JsonValue.Create("");
                         }
 
                         var variantPayload = new { product = variantObj };
