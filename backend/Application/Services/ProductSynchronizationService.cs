@@ -299,14 +299,14 @@ public abstract class ProductSynchronizationService
 
         const string name = "INDI-Dein Wunschname";
 
-        // Payload wird manuell gebaut — _pim_flock_name, _pim_flock_number
-        // und alle anderen PIM-Felder werden bewusst nicht mitgeschickt.
         var payload = new Dictionary<string, object?>
         {
             ["sku"] = masterSku,
             ["attributeSetId"] = variant.attributeSetId,
             ["_pim_art_name__actindo_basic__de_DE"] = name,
-            ["_pim_art_name__actindo_basic__en_US"] = name
+            ["_pim_art_name__actindo_basic__en_US"] = name,
+            ["_pim_flock_name"] = "",
+            ["_pim_flock_number"] = ""
         };
 
         if (!string.IsNullOrWhiteSpace(variant.id))
