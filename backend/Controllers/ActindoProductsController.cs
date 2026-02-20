@@ -138,6 +138,9 @@ public sealed class ActindoProductsController : ControllerBase
                     catch (Exception ex)
                     {
                         errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId,
+                            new { success = false, error = ex.Message }, created: true, ct);
+                        throw;
                     }
                     finally
                     {
@@ -346,6 +349,9 @@ public sealed class ActindoProductsController : ControllerBase
                     catch (Exception ex)
                     {
                         errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId,
+                            new { success = false, error = ex.Message }, created: false, ct);
+                        throw;
                     }
                     finally
                     {
@@ -703,6 +709,9 @@ public sealed class ActindoProductsController : ControllerBase
                     catch (Exception ex)
                     {
                         errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                        await _navCallback.SendCallbackAsync(masterSku, capturedBufferId,
+                            new { success = false, error = ex.Message }, created: false, ct);
+                        throw;
                     }
                     finally
                     {
