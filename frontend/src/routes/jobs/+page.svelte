@@ -1,91 +1,36 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
-		RefreshCw,
-		Search,
-		Trash2,
-		Play,
-		ChevronLeft,
-		ChevronRight,
-		Activity,
 		Loader2,
 		Clock,
 		CheckCircle2,
 		XCircle,
-		Zap
+		Zap,
+		RefreshCw,
+		PackageSearch
 	} from 'lucide-svelte';
-	import { jobsStore, type JobStatusFilter, type JobTypeFilter } from '$stores/dashboard';
-	import { permissions } from '$stores/auth';
-	import type { Job, ProductJobInfo } from '$api/types';
-	import { formatDate, formatDuration, prettifyJson } from '$utils/format';
+	import type { ProductJobInfo } from '$api/types';
 	import { products as productsApi } from '$api/client';
 	import PageHeader from '$components/layout/PageHeader.svelte';
 	import Card from '$components/ui/Card.svelte';
 	import Button from '$components/ui/Button.svelte';
-	import Input from '$components/ui/Input.svelte';
-	import Badge from '$components/ui/Badge.svelte';
-	import Alert from '$components/ui/Alert.svelte';
-	import Spinner from '$components/ui/Spinner.svelte';
-	import Modal from '$components/ui/Modal.svelte';
-	import CodeBlock from '$components/ui/CodeBlock.svelte';
 
-	let perms = $derived($permissions);
-	let jobs = $derived($jobsStore.jobs);
-	let total = $derived($jobsStore.total);
-	let page = $derived($jobsStore.page);
-	let pageSize = $derived($jobsStore.pageSize);
-	let selectedJobId = $derived($jobsStore.selectedJobId);
-	let statusFilter = $derived($jobsStore.statusFilter);
-	let typeFilter = $derived($jobsStore.typeFilter);
-	let loading = $derived($jobsStore.loading);
-	let error = $derived($jobsStore.error);
-
-	let selectedJob = $derived(jobs.find((j) => j.id === selectedJobId) ?? null);
-	let totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
-
-	let search = $state('');
-	let searchTimeout: ReturnType<typeof setTimeout>;
-
-	const statusOptions: { value: JobStatusFilter; label: string }[] = [
-		{ value: 'all', label: 'Alle' },
-		{ value: 'success', label: 'Erfolgreich' },
-		{ value: 'failed', label: 'Fehlgeschlagen' }
-	];
-
-	const typeOptions: { value: JobTypeFilter; label: string }[] = [
-		{ value: 'all', label: 'Alle Typen' },
-		{ value: 'product', label: 'Produkte' },
-		{ value: 'customer', label: 'Kunden' },
-		{ value: 'transaction', label: 'Transaktionen' },
-		{ value: 'media', label: 'Medien' }
-	];
-
-	// Replay modal
-	let replayOpen = $state(false);
-	let replayPayload = $state('');
-	let replayLoading = $state(false);
-	let replayError = $state('');
-
-	// Active sync jobs
 	let activeJobs = $state<ProductJobInfo[]>([]);
+	let loading = $state(true);
 	let now = $state(Date.now());
 
 	let runningCount = $derived(activeJobs.filter((j) => j.status === 'running').length);
 	let queuedCount = $derived(activeJobs.filter((j) => j.status === 'queued').length);
-	let hasActiveJobs = $derived(activeJobs.length > 0);
+	let completedCount = $derived(activeJobs.filter((j) => j.status === 'completed').length);
+	let failedCount = $derived(activeJobs.filter((j) => j.status === 'failed').length);
 
-	async function loadActiveJobs() {
+	async function load() {
 		try {
 			activeJobs = await productsApi.activeJobs();
-			// Reload historical jobs when async jobs complete (to pick up new DB entries)
-			const hasRunningOrQueued = activeJobs.some(
-				(j) => j.status === 'queued' || j.status === 'running'
-			);
-			if (!hasRunningOrQueued && activeJobs.some((j) => j.status === 'completed')) {
-				jobsStore.load();
-			}
 		} catch {
-			// ignore polling errors
+			// ignore
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -108,424 +53,193 @@
 	}
 
 	onMount(() => {
-		jobsStore.load();
-		loadActiveJobs();
-
-		const historyInterval = setInterval(() => jobsStore.load(), 15000);
-		const activeInterval = setInterval(() => loadActiveJobs(), 3000);
+		load();
+		const pollInterval = setInterval(() => load(), 3000);
 		const clockInterval = setInterval(() => (now = Date.now()), 1000);
-
 		return () => {
-			clearInterval(historyInterval);
-			clearInterval(activeInterval);
+			clearInterval(pollInterval);
 			clearInterval(clockInterval);
 		};
 	});
-
-	function handleSearch(e: Event) {
-		const target = e.target as HTMLInputElement;
-		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			jobsStore.setSearch(target.value);
-		}, 300);
-	}
-
-	async function handleDeleteJob(jobId: string) {
-		if (!confirm('Diesen Job wirklich loeschen?')) return;
-		try {
-			await jobsStore.deleteJob(jobId);
-		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Fehler beim Loeschen');
-		}
-	}
-
-	async function handleClearAll() {
-		if (!confirm('Gesamte Job-Historie wirklich loeschen?')) return;
-		try {
-			await jobsStore.deleteAllJobs();
-		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Fehler beim Loeschen');
-		}
-	}
-
-	function openReplayModal() {
-		if (!selectedJob) return;
-		replayPayload = selectedJob.requestPayload || '{}';
-		replayError = '';
-		replayOpen = true;
-	}
-
-	async function handleReplay() {
-		if (!selectedJob) return;
-
-		try {
-			JSON.parse(replayPayload);
-		} catch {
-			replayError = 'Ungueltiges JSON';
-			return;
-		}
-
-		replayLoading = true;
-		replayError = '';
-
-		try {
-			await jobsStore.replayJob(selectedJob.id, replayPayload);
-			replayOpen = false;
-			jobsStore.load();
-		} catch (err) {
-			replayError = err instanceof Error ? err.message : 'Replay fehlgeschlagen';
-		} finally {
-			replayLoading = false;
-		}
-	}
 </script>
 
 <svelte:head>
 	<title>Jobs | Actindo Middleware</title>
 </svelte:head>
 
-<PageHeader title="Job Monitor" subtitle="Uebersicht aller API-Jobs und Fehler">
+<PageHeader title="Jobs" subtitle="Aktive und wartende Produkt-Sync-Jobs">
 	{#snippet actions()}
-		{#if perms.canWrite}
-			<Button variant="danger" onclick={handleClearAll} disabled={jobs.length === 0}>
-				<Trash2 size={16} />
-				Alle loeschen
+		<div class="flex items-center gap-3">
+			{#if runningCount > 0 || queuedCount > 0}
+				<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-royal-600/20 border border-royal-500/30">
+					<Loader2 size={14} class="animate-spin text-royal-400" />
+					<span class="text-xs text-royal-300 font-medium">Live · alle 3s</span>
+				</div>
+			{/if}
+			<Button variant="ghost" onclick={load} disabled={loading}>
+				<RefreshCw size={16} class={loading ? 'animate-spin' : ''} />
+				Aktualisieren
 			</Button>
-		{/if}
-		<Button variant="ghost" onclick={() => jobsStore.load()} disabled={loading}>
-			<RefreshCw size={16} class={loading ? 'animate-spin' : ''} />
-			Aktualisieren
-		</Button>
+		</div>
 	{/snippet}
 </PageHeader>
 
-{#if error}
-	<Alert variant="error" class="mb-6">{error}</Alert>
-{/if}
-
-<!-- Aktive Sync-Jobs -->
-{#if hasActiveJobs}
-	<div class="mb-6">
-		<Card>
-			<div class="flex items-center justify-between mb-4">
-				<div class="flex items-center gap-3">
-					<div class="p-2 rounded-xl bg-royal-600/20 border border-royal-500/30">
-						<Zap size={18} class="text-royal-400" />
-					</div>
-					<div>
-						<h3 class="font-semibold text-white">Aktive Sync-Jobs</h3>
-						<p class="text-xs text-gray-400">
-							{#if runningCount > 0 && queuedCount > 0}
-								{runningCount} läuft · {queuedCount} in Warteschlange
-							{:else if runningCount > 0}
-								{runningCount} {runningCount === 1 ? 'Job läuft' : 'Jobs laufen'}
-							{:else if queuedCount > 0}
-								{queuedCount} {queuedCount === 1 ? 'Job wartet' : 'Jobs warten'}
-							{:else}
-								Alle Jobs abgeschlossen
-							{/if}
-						</p>
-					</div>
-				</div>
-				<div class="flex items-center gap-2">
-					{#if runningCount > 0 || queuedCount > 0}
-						<Loader2 size={16} class="animate-spin text-royal-400" />
-						<span class="text-xs text-royal-400">Live</span>
-					{/if}
-				</div>
-			</div>
-
-			<div class="space-y-2">
-				{#each activeJobs as job (job.id)}
-					<div
-						class="flex items-center gap-3 p-3 rounded-xl border transition-colors
-							{job.status === 'running'
-							? 'bg-royal-600/10 border-royal-500/30'
-							: job.status === 'queued'
-								? 'bg-white/5 border-white/10'
-								: job.status === 'completed'
-									? 'bg-green-900/10 border-green-500/20'
-									: 'bg-red-900/10 border-red-500/20'}"
-					>
-						<!-- Status Icon -->
-						<div class="shrink-0">
-							{#if job.status === 'running'}
-								<Loader2 size={18} class="animate-spin text-royal-400" />
-							{:else if job.status === 'queued'}
-								<Clock size={18} class="text-gray-400" />
-							{:else if job.status === 'completed'}
-								<CheckCircle2 size={18} class="text-green-400" />
-							{:else}
-								<XCircle size={18} class="text-red-400" />
-							{/if}
-						</div>
-
-						<!-- Info -->
-						<div class="flex-1 min-w-0">
-							<div class="flex items-center gap-2 flex-wrap">
-								<span class="font-medium text-sm text-white">{job.sku}</span>
-								<span
-									class="text-xs px-2 py-0.5 rounded-full
-										{job.status === 'running'
-										? 'bg-royal-600/30 text-royal-300'
-										: job.status === 'queued'
-											? 'bg-gray-700 text-gray-300'
-											: job.status === 'completed'
-												? 'bg-green-900/40 text-green-300'
-												: 'bg-red-900/40 text-red-300'}"
-								>
-									{job.status === 'running'
-										? 'Läuft'
-										: job.status === 'queued'
-											? 'Wartet'
-											: job.status === 'completed'
-												? 'Fertig'
-												: 'Fehler'}
-								</span>
-								<span class="text-xs text-gray-500">{operationLabel(job.operation)}</span>
-							</div>
-							{#if job.error}
-								<p class="text-xs text-red-400 mt-0.5 truncate">{job.error}</p>
-							{/if}
-							{#if job.bufferId}
-								<p class="text-xs text-gray-500 mt-0.5">Buffer: {job.bufferId}</p>
-							{/if}
-						</div>
-
-						<!-- Timing -->
-						<div class="shrink-0 text-right text-xs text-gray-400 space-y-0.5">
-							{#if job.status === 'queued'}
-								<div>Wartet {elapsedSeconds(job.queuedAt, null)}</div>
-							{:else if job.status === 'running'}
-								<div class="text-royal-300">Läuft {elapsedSeconds(job.startedAt, null)}</div>
-								<div class="text-gray-500">Queue {elapsedSeconds(job.queuedAt, job.startedAt)}</div>
-							{:else}
-								<div>Laufzeit {elapsedSeconds(job.startedAt, job.completedAt)}</div>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
-		</Card>
-	</div>
-{/if}
-
-<div class="grid lg:grid-cols-2 gap-6">
-	<!-- Jobs List -->
-	<Card>
-		<!-- Search & Filter -->
-		<div class="mb-4 space-y-3">
-			<div class="relative">
-				<Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
-				<Input
-					type="search"
-					placeholder="Suche nach Endpoint..."
-					value={search}
-					oninput={handleSearch}
-					class="pl-11"
-				/>
-			</div>
-
-			<!-- Filter Dropdowns -->
-			<div class="flex flex-wrap gap-2">
-				<select
-					value={statusFilter}
-					onchange={(e) => jobsStore.setStatusFilter(e.currentTarget.value as JobStatusFilter)}
-					class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white
-						focus:outline-none focus:border-royal-400/60 focus:ring-4 focus:ring-royal-400/10
-						cursor-pointer"
-				>
-					{#each statusOptions as opt}
-						<option value={opt.value} class="bg-gray-900">{opt.label}</option>
-					{/each}
-				</select>
-
-				<select
-					value={typeFilter}
-					onchange={(e) => jobsStore.setTypeFilter(e.currentTarget.value as JobTypeFilter)}
-					class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white
-						focus:outline-none focus:border-royal-400/60 focus:ring-4 focus:ring-royal-400/10
-						cursor-pointer"
-				>
-					{#each typeOptions as opt}
-						<option value={opt.value} class="bg-gray-900">{opt.label}</option>
-					{/each}
-				</select>
-			</div>
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+	<div class="rounded-xl border bg-royal-600/10 border-royal-500/30 p-4">
+		<div class="flex items-center gap-2 mb-1">
+			<Loader2 size={16} class="text-royal-400 {runningCount > 0 ? 'animate-spin' : ''}" />
+			<span class="text-xs text-gray-400 uppercase tracking-wide">Läuft</span>
 		</div>
-
-		{#if loading && jobs.length === 0}
-			<div class="flex justify-center py-12">
-				<Spinner />
-			</div>
-		{:else if jobs.length === 0}
-			<div class="text-center py-12 text-gray-400">
-				<Activity size={48} class="mx-auto mb-4 opacity-50" />
-				<p>Keine Jobs vorhanden</p>
-			</div>
-		{:else}
-			<div class="space-y-2 max-h-[500px] overflow-y-auto">
-				{#each jobs as job}
-					<button
-						type="button"
-						class="
-							w-full text-left p-4 rounded-xl border transition-all
-							{job.id === selectedJobId
-								? 'bg-royal-600/20 border-royal-600/50'
-								: 'bg-white/5 border-white/10 hover:bg-white/10'}
-						"
-						onclick={() => jobsStore.selectJob(job.id)}
-					>
-						<div class="flex items-center justify-between gap-2 mb-2">
-							<span class="font-medium truncate">{job.endpoint}</span>
-							<Badge variant={job.success ? 'success' : 'error'}>
-								{job.success ? 'OK' : 'Fehler'}
-							</Badge>
-						</div>
-						<div class="flex items-center gap-4 text-xs text-gray-400">
-							<span>{formatDuration(job.durationMilliseconds)}</span>
-							<span>{formatDate(job.startedAt)}</span>
-						</div>
-					</button>
-				{/each}
-			</div>
-
-			<!-- Pagination -->
-			<div class="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-				<span class="text-sm text-gray-400">
-					Seite {page} / {totalPages}
-				</span>
-				<div class="flex gap-2">
-					<Button
-						variant="ghost"
-						size="small"
-						disabled={page <= 1}
-						onclick={() => jobsStore.setPage(page - 1)}
-					>
-						<ChevronLeft size={16} />
-					</Button>
-					<Button
-						variant="ghost"
-						size="small"
-						disabled={page >= totalPages}
-						onclick={() => jobsStore.setPage(page + 1)}
-					>
-						<ChevronRight size={16} />
-					</Button>
-				</div>
-			</div>
-		{/if}
-	</Card>
-
-	<!-- Job Details -->
-	<Card>
-		{#if selectedJob}
-			<div class="flex items-center justify-between mb-4">
-				<div>
-					<h3 class="text-lg font-semibold">{selectedJob.endpoint}</h3>
-					<p class="text-sm text-gray-400">
-						{formatDate(selectedJob.startedAt)} - {formatDuration(selectedJob.durationMilliseconds)}
-					</p>
-				</div>
-				<div class="flex items-center gap-2">
-					<Badge variant={selectedJob.success ? 'success' : 'error'}>
-						{selectedJob.success ? 'Erfolgreich' : 'Fehler'}
-					</Badge>
-					{#if perms.canWrite}
-						<Button variant="ghost" size="small" onclick={openReplayModal}>
-							<Play size={14} />
-							Replay
-						</Button>
-						<Button variant="danger" size="small" onclick={() => handleDeleteJob(selectedJob.id)}>
-							<Trash2 size={14} />
-						</Button>
-					{/if}
-				</div>
-			</div>
-
-			<div class="space-y-4">
-				<div>
-					<h4 class="text-sm font-medium text-gray-400 mb-2">Request</h4>
-					<CodeBlock code={prettifyJson(selectedJob.requestPayload)} maxHeight="200px" />
-				</div>
-
-				<div>
-					<h4 class="text-sm font-medium text-gray-400 mb-2">Response</h4>
-					<CodeBlock
-						code={prettifyJson(
-							selectedJob.success
-								? selectedJob.responsePayload
-								: selectedJob.errorPayload ?? selectedJob.responsePayload
-						)}
-						error={!selectedJob.success}
-						maxHeight="200px"
-					/>
-				</div>
-
-				{#if selectedJob.actindoLogs && selectedJob.actindoLogs.length > 0}
-					<div>
-						<h4 class="text-sm font-medium text-gray-400 mb-2">
-							Actindo Calls ({selectedJob.actindoLogs.length})
-						</h4>
-						<div class="space-y-3 max-h-[300px] overflow-y-auto">
-							{#each selectedJob.actindoLogs as log}
-								<div class="p-3 rounded-xl bg-black/20 border border-white/5">
-									<div class="flex items-center justify-between mb-2">
-										<span class="text-sm font-medium">{log.endpoint}</span>
-										<Badge variant={log.success ? 'success' : 'error'}>
-											{log.success ? 'OK' : 'Fehler'}
-										</Badge>
-									</div>
-									<div class="grid md:grid-cols-2 gap-2">
-										<CodeBlock code={prettifyJson(log.requestPayload)} maxHeight="120px" />
-										<CodeBlock
-											code={prettifyJson(log.responsePayload)}
-											error={!log.success}
-											maxHeight="120px"
-										/>
-									</div>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div class="text-center py-12 text-gray-400">
-				<Activity size={48} class="mx-auto mb-4 opacity-50" />
-				<p>Waehle einen Job aus der Liste</p>
-			</div>
-		{/if}
-	</Card>
+		<p class="text-2xl font-bold text-royal-300">{runningCount}</p>
+	</div>
+	<div class="rounded-xl border bg-white/5 border-white/10 p-4">
+		<div class="flex items-center gap-2 mb-1">
+			<Clock size={16} class="text-gray-400" />
+			<span class="text-xs text-gray-400 uppercase tracking-wide">Wartend</span>
+		</div>
+		<p class="text-2xl font-bold text-gray-300">{queuedCount}</p>
+	</div>
+	<div class="rounded-xl border bg-green-900/10 border-green-500/20 p-4">
+		<div class="flex items-center gap-2 mb-1">
+			<CheckCircle2 size={16} class="text-green-400" />
+			<span class="text-xs text-gray-400 uppercase tracking-wide">Fertig</span>
+		</div>
+		<p class="text-2xl font-bold text-green-300">{completedCount}</p>
+	</div>
+	<div class="rounded-xl border bg-red-900/10 border-red-500/20 p-4">
+		<div class="flex items-center gap-2 mb-1">
+			<XCircle size={16} class="text-red-400" />
+			<span class="text-xs text-gray-400 uppercase tracking-wide">Fehler</span>
+		</div>
+		<p class="text-2xl font-bold text-red-300">{failedCount}</p>
+	</div>
 </div>
 
-<!-- Replay Modal -->
-<Modal bind:open={replayOpen} title="Job Replay">
-	<div class="space-y-4">
-		<p class="text-sm text-gray-400">
-			Bearbeite das Request-Payload und sende den Job erneut.
+<!-- Jobs Table -->
+<Card>
+	{#if loading && activeJobs.length === 0}
+		<div class="flex justify-center py-16">
+			<Loader2 size={32} class="animate-spin text-royal-400" />
+		</div>
+	{:else if activeJobs.length === 0}
+		<div class="text-center py-16 text-gray-400">
+			<PackageSearch size={48} class="mx-auto mb-4 opacity-40" />
+			<p class="font-medium mb-1">Keine aktiven Jobs</p>
+			<p class="text-sm text-gray-500">Jobs erscheinen hier sobald ein Produkt-Sync mit await=false gestartet wird</p>
+		</div>
+	{:else}
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-white/10 text-left">
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Status</th>
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">SKU</th>
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Operation</th>
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Queue-Zeit</th>
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Laufzeit</th>
+						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Buffer ID</th>
+						<th class="pb-3 font-medium text-gray-400">Fehler</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-white/5">
+					{#each activeJobs as job (job.id)}
+						<tr
+							class="transition-colors
+								{job.status === 'running'
+								? 'bg-royal-600/5'
+								: job.status === 'failed'
+									? 'bg-red-900/5'
+									: ''}"
+						>
+							<!-- Status -->
+							<td class="py-3 pr-4">
+								<div class="flex items-center gap-2 whitespace-nowrap">
+									{#if job.status === 'running'}
+										<Loader2 size={15} class="animate-spin text-royal-400 shrink-0" />
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-royal-600/30 text-royal-300">
+											Läuft
+										</span>
+									{:else if job.status === 'queued'}
+										<Clock size={15} class="text-gray-400 shrink-0" />
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
+											Wartet
+										</span>
+									{:else if job.status === 'completed'}
+										<CheckCircle2 size={15} class="text-green-400 shrink-0" />
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-900/40 text-green-300">
+											Fertig
+										</span>
+									{:else}
+										<XCircle size={15} class="text-red-400 shrink-0" />
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-900/40 text-red-300">
+											Fehler
+										</span>
+									{/if}
+								</div>
+							</td>
+
+							<!-- SKU -->
+							<td class="py-3 pr-4">
+								<span class="font-mono font-medium text-white">{job.sku}</span>
+							</td>
+
+							<!-- Operation -->
+							<td class="py-3 pr-4">
+								<div class="flex items-center gap-1.5">
+									<Zap size={13} class="text-royal-400 shrink-0" />
+									<span class="text-gray-300">{operationLabel(job.operation)}</span>
+								</div>
+							</td>
+
+							<!-- Queue-Zeit -->
+							<td class="py-3 pr-4 text-gray-400 tabular-nums whitespace-nowrap">
+								{#if job.startedAt}
+									{elapsedSeconds(job.queuedAt, job.startedAt)}
+								{:else}
+									<span class="text-royal-400">{elapsedSeconds(job.queuedAt, null)}</span>
+								{/if}
+							</td>
+
+							<!-- Laufzeit -->
+							<td class="py-3 pr-4 tabular-nums whitespace-nowrap">
+								{#if job.status === 'running'}
+									<span class="text-royal-300">{elapsedSeconds(job.startedAt, null)}</span>
+								{:else if job.startedAt}
+									<span class="text-gray-400">{elapsedSeconds(job.startedAt, job.completedAt)}</span>
+								{:else}
+									<span class="text-gray-600">—</span>
+								{/if}
+							</td>
+
+							<!-- Buffer ID -->
+							<td class="py-3 pr-4">
+								{#if job.bufferId}
+									<span class="font-mono text-xs text-gray-400 max-w-[120px] truncate block" title={job.bufferId}>
+										{job.bufferId}
+									</span>
+								{:else}
+									<span class="text-gray-600">—</span>
+								{/if}
+							</td>
+
+							<!-- Fehler -->
+							<td class="py-3">
+								{#if job.error}
+									<span class="text-xs text-red-400 max-w-[200px] truncate block" title={job.error}>
+										{job.error}
+									</span>
+								{:else}
+									<span class="text-gray-600">—</span>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+		<p class="text-xs text-gray-600 mt-4">
+			Abgeschlossene Jobs werden nach 5 Minuten automatisch entfernt.
 		</p>
-
-		{#if replayError}
-			<Alert variant="error">{replayError}</Alert>
-		{/if}
-
-		<textarea
-			bind:value={replayPayload}
-			class="
-				w-full h-64 p-4 rounded-xl
-				bg-black/30 border border-white/10
-				font-mono text-sm text-white
-				resize-none outline-none
-				focus:border-royal-400/60 focus:ring-4 focus:ring-royal-400/10
-			"
-		></textarea>
-	</div>
-
-	{#snippet footer()}
-		<Button variant="ghost" onclick={() => (replayOpen = false)}>Abbrechen</Button>
-		<Button onclick={handleReplay} disabled={replayLoading}>
-			{replayLoading ? 'Sende...' : 'Replay senden'}
-		</Button>
-	{/snippet}
-</Modal>
+	{/if}
+</Card>
