@@ -59,7 +59,7 @@ public sealed class ActindoProductsController : ControllerBase
     [Authorize(Policy = AuthPolicies.Read)]
     public IActionResult GetActiveJobs() => Ok(_jobQueue.GetAll());
 
-    private async Task<IActionResult?> ValidateNavSettingsForAsync(CancellationToken cancellationToken)
+    private async Task<ActionResult?> ValidateNavSettingsForAsync(CancellationToken cancellationToken)
     {
         var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(settings.NavApiUrl) || string.IsNullOrWhiteSpace(settings.NavApiToken))

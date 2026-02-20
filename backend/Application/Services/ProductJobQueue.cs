@@ -97,7 +97,7 @@ public sealed class ProductJobQueue
 
             // Auto-remove after 5 minutes
             _ = Task.Delay(TimeSpan.FromMinutes(5))
-                    .ContinueWith(_ => _jobs.TryRemove(info.Id, out _));
+                    .ContinueWith(t => _jobs.TryRemove(info.Id, out _));
         }
     }
 
