@@ -299,6 +299,8 @@ public abstract class ProductSynchronizationService
 
         const string name = "INDI-Dein Wunschname";
 
+        // Payload wird manuell gebaut — _pim_flock_name, _pim_flock_number
+        // und alle anderen PIM-Felder werden bewusst nicht mitgeschickt.
         var payload = new Dictionary<string, object?>
         {
             ["sku"] = masterSku,
@@ -329,9 +331,11 @@ public abstract class ProductSynchronizationService
         string productEndpoint,
         CancellationToken cancellationToken)
     {
-        var masterSku = $"{masterProduct.sku}-INDI";
-        var indiMasterPayload = new { product = BuildIndiMasterPayload(masterProduct, variant, masterSku) };
         var endpoints = await ResolveEndpointsAsync(cancellationToken);
+        var masterSku = $"{masterProduct.sku}-INDI";
+        var isNew = string.IsNullOrWhiteSpace(variant.id);
+
+        var indiMasterPayload = new { product = BuildIndiMasterPayload(masterProduct, variant, masterSku) };
         LogEndpointPayload(productEndpoint, indiMasterPayload);
         var indiMasterResponse = await _client.PostAsync(
             productEndpoint,
@@ -341,9 +345,25 @@ public abstract class ProductSynchronizationService
         var indiMasterId = ReadProductId(indiMasterResponse);
 
         _logger.LogInformation(
-            "INDI product synced for SKU {Sku} with ID {Id} (no relation to master)",
+            "INDI product synced for SKU {Sku} with ID {Id}",
             masterSku,
             indiMasterId);
+
+        // Nur bei Neuanlage mit changeVariantMaster verknüpfen
+        if (isNew)
+        {
+            var relationPayload = new
+            {
+                variantProduct = new { id = indiMasterId },
+                parentProduct = new { id = masterProductId }
+            };
+            LogEndpointPayload(endpoints.CreateRelation, relationPayload);
+            await _client.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
+            _logger.LogInformation(
+                "INDI product {Sku} linked to master {MasterId}",
+                masterSku,
+                masterProductId);
+        }
 
         return new VariantCreationResult(masterSku, indiMasterId);
     }
