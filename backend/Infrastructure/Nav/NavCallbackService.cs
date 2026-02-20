@@ -29,8 +29,9 @@ public sealed class NavCallbackService
 
     /// <summary>
     /// Sendet das Sync-Ergebnis an NAV zurück. Wirft keine Exception — Fehler werden nur geloggt.
+    /// Gibt true zurück wenn NAV mit {"success": true} geantwortet hat.
     /// </summary>
-    public async Task SendCallbackAsync(
+    public async Task<bool> SendCallbackAsync(
         string sku,
         string? bufferId,
         object result,
@@ -44,7 +45,7 @@ public sealed class NavCallbackService
             if (string.IsNullOrWhiteSpace(settings.NavApiUrl) || string.IsNullOrWhiteSpace(settings.NavApiToken))
             {
                 _logger.LogWarning("NAV callback skipped: NavApiUrl or NavApiToken not configured");
-                return;
+                return false;
             }
 
             // Serialize result to JsonElement, then merge with sku + bufferId + created
@@ -71,14 +72,35 @@ public sealed class NavCallbackService
                 "NAV callback sent for SKU={Sku} BufferId={BufferId}: HTTP {Status} | Response: {Body}",
                 sku, bufferId ?? "(none)", (int)response.StatusCode,
                 responseBody.Length > 500 ? responseBody[..500] : responseBody);
+
+            return NavAcknowledgedSuccess(responseBody);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "NAV callback failed for SKU={Sku} BufferId={BufferId}",
                 sku, bufferId ?? "(none)");
-            // Kein Re-throw — Callback-Fehler sollen den Job nicht gefährden
+            return false;
         }
+    }
+
+    /// <summary>
+    /// Prüft ob NAV mit {"success": true} (oder "true") geantwortet hat.
+    /// </summary>
+    private static bool NavAcknowledgedSuccess(string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            if (doc.RootElement.TryGetProperty("success", out var successProp))
+            {
+                return successProp.ValueKind == JsonValueKind.True ||
+                       (successProp.ValueKind == JsonValueKind.String &&
+                        successProp.GetString()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true);
+            }
+        }
+        catch { /* kein gültiges JSON */ }
+        return false;
     }
 
     private static object BuildPayload(JsonElement result, string sku, string? bufferId, bool created)
