@@ -8,6 +8,7 @@ import type {
 	Job,
 	ProductListItem,
 	ProductStockItem,
+	ProductJobInfo,
 	CustomerListItem,
 	UserDto,
 	CreateUserRequest,
@@ -170,7 +171,9 @@ export const products = {
 		request<void>('/api/products/delete', {
 			method: 'POST',
 			body: JSON.stringify(data)
-		})
+		}),
+
+	activeJobs: () => request<ProductJobInfo[]>('/api/actindo/products/active-jobs')
 };
 
 // Customers API

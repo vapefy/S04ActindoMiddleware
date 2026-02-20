@@ -7,12 +7,18 @@
 		Play,
 		ChevronLeft,
 		ChevronRight,
-		Activity
+		Activity,
+		Loader2,
+		Clock,
+		CheckCircle2,
+		XCircle,
+		Zap
 	} from 'lucide-svelte';
 	import { jobsStore, type JobStatusFilter, type JobTypeFilter } from '$stores/dashboard';
 	import { permissions } from '$stores/auth';
-	import type { Job } from '$api/types';
+	import type { Job, ProductJobInfo } from '$api/types';
 	import { formatDate, formatDuration, prettifyJson } from '$utils/format';
+	import { products as productsApi } from '$api/client';
 	import PageHeader from '$components/layout/PageHeader.svelte';
 	import Card from '$components/ui/Card.svelte';
 	import Button from '$components/ui/Button.svelte';
@@ -60,10 +66,60 @@
 	let replayLoading = $state(false);
 	let replayError = $state('');
 
+	// Active sync jobs
+	let activeJobs = $state<ProductJobInfo[]>([]);
+	let now = $state(Date.now());
+
+	let runningCount = $derived(activeJobs.filter((j) => j.status === 'running').length);
+	let queuedCount = $derived(activeJobs.filter((j) => j.status === 'queued').length);
+	let hasActiveJobs = $derived(activeJobs.length > 0);
+
+	async function loadActiveJobs() {
+		try {
+			activeJobs = await productsApi.activeJobs();
+			// Reload historical jobs when async jobs complete (to pick up new DB entries)
+			const hasRunningOrQueued = activeJobs.some(
+				(j) => j.status === 'queued' || j.status === 'running'
+			);
+			if (!hasRunningOrQueued && activeJobs.some((j) => j.status === 'completed')) {
+				jobsStore.load();
+			}
+		} catch {
+			// ignore polling errors
+		}
+	}
+
+	function elapsedSeconds(from: string | null, to: string | null): string {
+		if (!from) return '—';
+		const start = new Date(from).getTime();
+		const end = to ? new Date(to).getTime() : now;
+		const secs = Math.max(0, Math.floor((end - start) / 1000));
+		if (secs < 60) return `${secs}s`;
+		const m = Math.floor(secs / 60);
+		const s = secs % 60;
+		return `${m}m ${s}s`;
+	}
+
+	function operationLabel(op: string): string {
+		if (op === 'create') return 'Anlegen';
+		if (op === 'save') return 'Speichern';
+		if (op === 'full') return 'Full Sync';
+		return op;
+	}
+
 	onMount(() => {
 		jobsStore.load();
-		const interval = setInterval(() => jobsStore.load(), 15000);
-		return () => clearInterval(interval);
+		loadActiveJobs();
+
+		const historyInterval = setInterval(() => jobsStore.load(), 15000);
+		const activeInterval = setInterval(() => loadActiveJobs(), 3000);
+		const clockInterval = setInterval(() => (now = Date.now()), 1000);
+
+		return () => {
+			clearInterval(historyInterval);
+			clearInterval(activeInterval);
+			clearInterval(clockInterval);
+		};
 	});
 
 	function handleSearch(e: Event) {
@@ -145,6 +201,113 @@
 
 {#if error}
 	<Alert variant="error" class="mb-6">{error}</Alert>
+{/if}
+
+<!-- Aktive Sync-Jobs -->
+{#if hasActiveJobs}
+	<div class="mb-6">
+		<Card>
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-3">
+					<div class="p-2 rounded-xl bg-royal-600/20 border border-royal-500/30">
+						<Zap size={18} class="text-royal-400" />
+					</div>
+					<div>
+						<h3 class="font-semibold text-white">Aktive Sync-Jobs</h3>
+						<p class="text-xs text-gray-400">
+							{#if runningCount > 0 && queuedCount > 0}
+								{runningCount} läuft · {queuedCount} in Warteschlange
+							{:else if runningCount > 0}
+								{runningCount} {runningCount === 1 ? 'Job läuft' : 'Jobs laufen'}
+							{:else if queuedCount > 0}
+								{queuedCount} {queuedCount === 1 ? 'Job wartet' : 'Jobs warten'}
+							{:else}
+								Alle Jobs abgeschlossen
+							{/if}
+						</p>
+					</div>
+				</div>
+				<div class="flex items-center gap-2">
+					{#if runningCount > 0 || queuedCount > 0}
+						<Loader2 size={16} class="animate-spin text-royal-400" />
+						<span class="text-xs text-royal-400">Live</span>
+					{/if}
+				</div>
+			</div>
+
+			<div class="space-y-2">
+				{#each activeJobs as job (job.id)}
+					<div
+						class="flex items-center gap-3 p-3 rounded-xl border transition-colors
+							{job.status === 'running'
+							? 'bg-royal-600/10 border-royal-500/30'
+							: job.status === 'queued'
+								? 'bg-white/5 border-white/10'
+								: job.status === 'completed'
+									? 'bg-green-900/10 border-green-500/20'
+									: 'bg-red-900/10 border-red-500/20'}"
+					>
+						<!-- Status Icon -->
+						<div class="shrink-0">
+							{#if job.status === 'running'}
+								<Loader2 size={18} class="animate-spin text-royal-400" />
+							{:else if job.status === 'queued'}
+								<Clock size={18} class="text-gray-400" />
+							{:else if job.status === 'completed'}
+								<CheckCircle2 size={18} class="text-green-400" />
+							{:else}
+								<XCircle size={18} class="text-red-400" />
+							{/if}
+						</div>
+
+						<!-- Info -->
+						<div class="flex-1 min-w-0">
+							<div class="flex items-center gap-2 flex-wrap">
+								<span class="font-medium text-sm text-white">{job.sku}</span>
+								<span
+									class="text-xs px-2 py-0.5 rounded-full
+										{job.status === 'running'
+										? 'bg-royal-600/30 text-royal-300'
+										: job.status === 'queued'
+											? 'bg-gray-700 text-gray-300'
+											: job.status === 'completed'
+												? 'bg-green-900/40 text-green-300'
+												: 'bg-red-900/40 text-red-300'}"
+								>
+									{job.status === 'running'
+										? 'Läuft'
+										: job.status === 'queued'
+											? 'Wartet'
+											: job.status === 'completed'
+												? 'Fertig'
+												: 'Fehler'}
+								</span>
+								<span class="text-xs text-gray-500">{operationLabel(job.operation)}</span>
+							</div>
+							{#if job.error}
+								<p class="text-xs text-red-400 mt-0.5 truncate">{job.error}</p>
+							{/if}
+							{#if job.bufferId}
+								<p class="text-xs text-gray-500 mt-0.5">Buffer: {job.bufferId}</p>
+							{/if}
+						</div>
+
+						<!-- Timing -->
+						<div class="shrink-0 text-right text-xs text-gray-400 space-y-0.5">
+							{#if job.status === 'queued'}
+								<div>Wartet {elapsedSeconds(job.queuedAt, null)}</div>
+							{:else if job.status === 'running'}
+								<div class="text-royal-300">Läuft {elapsedSeconds(job.startedAt, null)}</div>
+								<div class="text-gray-500">Queue {elapsedSeconds(job.queuedAt, job.startedAt)}</div>
+							{:else}
+								<div>Laufzeit {elapsedSeconds(job.startedAt, job.completedAt)}</div>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</Card>
+	</div>
 {/if}
 
 <div class="grid lg:grid-cols-2 gap-6">

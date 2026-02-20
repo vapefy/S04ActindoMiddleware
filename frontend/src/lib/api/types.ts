@@ -1,3 +1,18 @@
+// Active Product Sync Jobs
+export type ProductSyncJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface ProductJobInfo {
+	id: string;
+	sku: string;
+	operation: string; // "create" | "save" | "full"
+	bufferId: string | null;
+	status: ProductSyncJobStatus;
+	queuedAt: string;
+	startedAt: string | null;
+	completedAt: string | null;
+	error: string | null;
+}
+
 // Auth Types
 export interface User {
 	authenticated: boolean;
