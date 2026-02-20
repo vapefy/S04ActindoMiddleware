@@ -10,10 +10,36 @@ using ActindoMiddleware.Infrastructure.Nav;
 using ActindoMiddleware.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    var builtInFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var logger = context.HttpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("ModelValidation");
+
+        logger.LogWarning("Model validation failed for {Method} {Path}",
+            context.HttpContext.Request.Method,
+            context.HttpContext.Request.Path);
+
+        foreach (var (key, entry) in context.ModelState)
+        {
+            foreach (var error in entry.Errors)
+            {
+                logger.LogWarning("  Field '{Field}': {Error}", key, error.ErrorMessage);
+            }
+        }
+
+        return builtInFactory(context);
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
@@ -117,6 +143,18 @@ app.Use(async (context, next) =>
         context.Request.Method,
         context.Request.Path,
         context.Request.QueryString);
+
+    // Log request body for actindo API routes (for debugging)
+    if (context.Request.Path.StartsWithSegments("/api/actindo") &&
+        context.Request.ContentLength > 0 &&
+        context.Request.ContentLength < 65536) // max 64KB to avoid huge logs
+    {
+        context.Request.EnableBuffering();
+        var body = await new System.IO.StreamReader(context.Request.Body).ReadToEndAsync();
+        context.Request.Body.Position = 0;
+        logger.LogDebug("    Body: {Body}", body.Length > 2000 ? body[..2000] + "...(truncated)" : body);
+    }
+
     await next();
     logger.LogInformation("<<< {Method} {Path} => {StatusCode}",
         context.Request.Method,
