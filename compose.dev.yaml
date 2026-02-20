@@ -11,7 +11,7 @@ services:
       - ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT=Information
       - ASPNETCORE_LOGGING__LOGLEVEL__MICROSOFT=Warning
     volumes:
-      - ./backend/App_Data:/app/App_Data
+      - actindo_data_dev:/app/App_Data
       - ./.actindo-refresh-token:/app/.actindo-refresh-token
     networks:
       - monitoring_default
@@ -20,3 +20,6 @@ services:
 networks:
   monitoring_default:
     external: true
+
+volumes:
+  actindo_data_dev:

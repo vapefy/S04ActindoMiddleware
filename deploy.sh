@@ -28,6 +28,7 @@ usage() {
 # Defaults
 COMPOSE_FILE="compose.yaml"
 ENV_NAME="production"
+VOLUME_NAME="actindo_data"
 DO_PULL=true
 DO_BUILD=true
 
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
         -d|--dev)
             COMPOSE_FILE="compose.dev.yaml"
             ENV_NAME="development"
+            VOLUME_NAME="actindo_data_dev"
             shift
             ;;
         -l|--live)
@@ -73,6 +75,20 @@ echo " Deploying: $ENV_NAME"
 echo " Compose:   $COMPOSE_FILE"
 echo "============================================"
 echo ""
+
+# Step 0: Migrate App_Data from old bind-mount to named volume (one-time migration)
+OLD_DATA_DIR="./backend/App_Data/dashboard.db"
+if [[ -f "$OLD_DATA_DIR" ]]; then
+    if ! docker volume ls --format '{{.Name}}' | grep -qx "$VOLUME_NAME"; then
+        echo "[0/4] Migrating database to Docker named volume '$VOLUME_NAME'..."
+        docker volume create "$VOLUME_NAME"
+        docker run --rm \
+            -v "$(pwd)/backend/App_Data":/source \
+            -v "${VOLUME_NAME}:/dest" \
+            alpine sh -c "cp /source/dashboard.db /dest/dashboard.db && echo 'Migration done'"
+        echo "      Migration complete. Old file kept at $OLD_DATA_DIR as backup."
+    fi
+fi
 
 # Step 1: Stop containers
 echo "[1/4] Stopping containers..."
