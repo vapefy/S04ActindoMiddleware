@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ActindoMiddleware.Infrastructure.Serialization;
 
 namespace ActindoMiddleware.DTOs.Requests;
 
@@ -31,5 +32,6 @@ public sealed class FullProductRequest
     /// Buffer-ID aus NAV, wird im Callback zurückgesendet.
     /// </summary>
     [JsonPropertyName("bufferId")]
+    [JsonConverter(typeof(StringOrNumberJsonConverter))]
     public string? BufferId { get; init; }
 }
