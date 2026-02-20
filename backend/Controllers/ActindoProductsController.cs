@@ -133,7 +133,7 @@ public sealed class ActindoProductsController : ControllerBase
 
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(result);
-                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, ct);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, created: true, ct);
                     }
                     catch (Exception ex)
                     {
@@ -341,7 +341,7 @@ public sealed class ActindoProductsController : ControllerBase
                         var result = await service.SaveAsync(capturedRequest, ct);
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(result);
-                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, ct);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, created: false, ct);
                     }
                     catch (Exception ex)
                     {
@@ -698,7 +698,7 @@ public sealed class ActindoProductsController : ControllerBase
                         var results = await RunFullSyncCoreAsync(rawProduct, capturedInventories, actindoClient, ct);
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(results);
-                        await _navCallback.SendCallbackAsync(masterSku, capturedBufferId, results, ct);
+                        await _navCallback.SendCallbackAsync(masterSku, capturedBufferId, results, created: results.MasterOperation == "created", ct);
                     }
                     catch (Exception ex)
                     {

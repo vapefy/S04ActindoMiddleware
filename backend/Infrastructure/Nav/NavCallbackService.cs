@@ -34,6 +34,7 @@ public sealed class NavCallbackService
         string sku,
         string? bufferId,
         object result,
+        bool created,
         CancellationToken cancellationToken = default)
     {
         try
@@ -46,9 +47,9 @@ public sealed class NavCallbackService
                 return;
             }
 
-            // Serialize result to JsonElement, then merge with sku + bufferId
+            // Serialize result to JsonElement, then merge with sku + bufferId + created
             var resultJson = JsonSerializer.SerializeToElement(result, SerializerOptions);
-            var payload = BuildPayload(resultJson, sku, bufferId);
+            var payload = BuildPayload(resultJson, sku, bufferId, created);
 
             var tokenPreview = settings.NavApiToken!.Length > 8
                 ? settings.NavApiToken[..8] + "..."
@@ -80,9 +81,9 @@ public sealed class NavCallbackService
         }
     }
 
-    private static object BuildPayload(JsonElement result, string sku, string? bufferId)
+    private static object BuildPayload(JsonElement result, string sku, string? bufferId, bool created)
     {
-        // Wandelt das result-Objekt in ein Dictionary um und fügt sku + bufferId hinzu
+        // Wandelt das result-Objekt in ein Dictionary um und fügt sku + bufferId + created hinzu
         var dict = new System.Collections.Generic.Dictionary<string, object?>();
 
         if (result.ValueKind == JsonValueKind.Object)
@@ -94,6 +95,7 @@ public sealed class NavCallbackService
         dict["requestType"] = "actindo.product.response";
         dict["sku"] = sku;
         dict["bufferId"] = bufferId;
+        dict["created"] = created;
 
         return dict;
     }
