@@ -6,6 +6,7 @@ using ActindoMiddleware.Application.Configuration;
 using ActindoMiddleware.DTOs.Requests;
 using ActindoMiddleware.DTOs.Responses;
 using ActindoMiddleware.Infrastructure.Actindo;
+using ActindoMiddleware.Infrastructure.Nav;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -25,6 +26,9 @@ public sealed class ActindoProductsController : ControllerBase
     private readonly ActindoClient _actindoClient;
     private readonly IActindoEndpointProvider _endpointProvider;
     private readonly ISettingsStore _settingsStore;
+    private readonly ProductJobQueue _jobQueue;
+    private readonly NavCallbackService _navCallback;
+    private readonly IServiceScopeFactory _scopeFactory;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> InventoryLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProductLocks = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxConcurrentInventoryPosts = 8;
@@ -35,7 +39,10 @@ public sealed class ActindoProductsController : ControllerBase
         IDashboardMetricsService dashboardMetrics,
         ActindoClient actindoClient,
         IActindoEndpointProvider endpointProvider,
-        ISettingsStore settingsStore)
+        ISettingsStore settingsStore,
+        ProductJobQueue jobQueue,
+        NavCallbackService navCallback,
+        IServiceScopeFactory scopeFactory)
     {
         _productCreateService = productCreateService;
         _productSaveService = productSaveService;
@@ -43,6 +50,21 @@ public sealed class ActindoProductsController : ControllerBase
         _actindoClient = actindoClient;
         _endpointProvider = endpointProvider;
         _settingsStore = settingsStore;
+        _jobQueue = jobQueue;
+        _navCallback = navCallback;
+        _scopeFactory = scopeFactory;
+    }
+
+    [HttpGet("active-jobs")]
+    [Authorize(Policy = AuthPolicies.Read)]
+    public IActionResult GetActiveJobs() => Ok(_jobQueue.GetAll());
+
+    private async Task<IActionResult?> ValidateNavSettingsForAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsStore.GetActindoSettingsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(settings.NavApiUrl) || string.IsNullOrWhiteSpace(settings.NavApiToken))
+            return BadRequest("NAV API Endpoint und Token müssen in den Einstellungen konfiguriert sein, um asynchrone Verarbeitung (await=false) zu nutzen.");
+        return null;
     }
 
     /// <summary>
@@ -50,6 +72,7 @@ public sealed class ActindoProductsController : ControllerBase
     /// </summary>
     [HttpPost("create")]
     [ProducesResponseType(typeof(CreateProductResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CreateProductResponse>> CreateProduct(
@@ -62,80 +85,123 @@ public sealed class ActindoProductsController : ControllerBase
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var cancellationToken = cts.Token;
 
-        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+        if (!request.Await)
+        {
+            var navError = await ValidateNavSettingsForAsync(cancellationToken);
+            if (navError != null) return navError;
+
+            var capturedRequest = request;
+            var requestPayload = DashboardPayloadSerializer.Serialize(request);
+            var sku = request.Product.sku;
+
+            _jobQueue.Enqueue(sku, "create", request.BufferId, async ct =>
+            {
+                var productLock = ProductLocks.GetOrAdd(sku, _ => new SemaphoreSlim(1, 1));
+                await productLock.WaitAsync(ct);
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<ProductCreateService>();
+
+                    var jobHandle = await _dashboardMetrics.BeginJobAsync(
+                        DashboardMetricType.Product, DashboardJobEndpoints.ProductCreate, requestPayload, ct);
+                    using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+                    var sw = Stopwatch.StartNew();
+                    bool success = false; string? responsePayload = null; string? errorPayload = null;
+
+                    try
+                    {
+                        var result = await service.CreateAsync(capturedRequest, ct);
+                        var product = capturedRequest.Product;
+                        var hasVariants = product.Variants?.Count > 0;
+
+                        await _dashboardMetrics.SaveProductAsync(
+                            jobHandle.Id, product.sku, GetProductName(product),
+                            result.ProductId, hasVariants ? "master" : "single", null, null, ct);
+
+                        if (result.Variants != null)
+                        {
+                            foreach (var variantResult in result.Variants)
+                            {
+                                var variantDto = product.Variants?.FirstOrDefault(v => v.sku == variantResult.Sku);
+                                await _dashboardMetrics.SaveProductAsync(
+                                    jobHandle.Id, variantResult.Sku,
+                                    variantDto != null ? GetProductName(variantDto) : string.Empty,
+                                    variantResult.Id, "child", product.sku, variantDto?._pim_varcode, ct);
+                            }
+                        }
+
+                        success = true;
+                        responsePayload = DashboardPayloadSerializer.Serialize(result);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                    }
+                    finally
+                    {
+                        await _dashboardMetrics.CompleteJobAsync(
+                            jobHandle, success, sw.Elapsed, responsePayload, errorPayload, ct);
+                    }
+                }
+                finally
+                {
+                    productLock.Release();
+                }
+            });
+
+            return Accepted(new { message = "Sync wird ausgeführt", bufferId = request.BufferId });
+        }
+
+        var jobHandle2 = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
             DashboardJobEndpoints.ProductCreate,
             DashboardPayloadSerializer.Serialize(request),
             cancellationToken);
-        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        using var jobScope2 = DashboardJobContext.Begin(jobHandle2.Id);
         var stopwatch = Stopwatch.StartNew();
-        var success = false;
-        string? responsePayload = null;
-        string? errorPayload = null;
+        var success2 = false;
+        string? responsePayload2 = null;
+        string? errorPayload2 = null;
         var createProductLock = ProductLocks.GetOrAdd(request.Product.sku, _ => new SemaphoreSlim(1, 1));
         await createProductLock.WaitAsync(cancellationToken);
         try
         {
             var result = await _productCreateService.CreateAsync(request, cancellationToken);
-            success = true;
-            responsePayload = DashboardPayloadSerializer.Serialize(result);
+            success2 = true;
+            responsePayload2 = DashboardPayloadSerializer.Serialize(result);
 
-            // Save master product to local database
             var product = request.Product;
             var hasVariants = product.Variants?.Count > 0;
-            var masterVariantStatus = hasVariants ? "master" : "single";
-            var masterName = GetProductName(product);
-
             await _dashboardMetrics.SaveProductAsync(
-                jobHandle.Id,
-                product.sku,
-                masterName,
-                result.ProductId,
-                masterVariantStatus,
-                null, // parentSku
-                null, // variantCode
-                cancellationToken);
+                jobHandle2.Id, product.sku, GetProductName(product),
+                result.ProductId, hasVariants ? "master" : "single", null, null, cancellationToken);
 
-            // Save variants to local database
             if (result.Variants != null)
             {
                 foreach (var variantResult in result.Variants)
                 {
                     var variantDto = product.Variants?.FirstOrDefault(v => v.sku == variantResult.Sku);
                     var variantName = variantDto != null ? GetProductName(variantDto) : string.Empty;
-                    var variantCode = variantDto?._pim_varcode;
-
                     await _dashboardMetrics.SaveProductAsync(
-                        jobHandle.Id,
-                        variantResult.Sku,
-                        variantName,
-                        variantResult.Id,
-                        "child",
-                        product.sku, // parentSku = master SKU
-                        variantCode,
-                        cancellationToken);
+                        jobHandle2.Id, variantResult.Sku, variantName,
+                        variantResult.Id, "child", product.sku, variantDto?._pim_varcode, cancellationToken);
                 }
             }
 
-            return Created(
-                string.Empty, // kein Location-Header notwendig
-                result);
+            return Created(string.Empty, result);
         }
         catch (Exception ex)
         {
-            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            errorPayload2 = DashboardPayloadSerializer.SerializeError(ex);
             throw;
         }
         finally
         {
             createProductLock.Release();
             await _dashboardMetrics.CompleteJobAsync(
-                jobHandle,
-                success,
-                stopwatch.Elapsed,
-                responsePayload,
-                errorPayload,
-                cancellationToken);
+                jobHandle2, success2, stopwatch.Elapsed, responsePayload2, errorPayload2, cancellationToken);
         }
     }
 
@@ -233,6 +299,7 @@ public sealed class ActindoProductsController : ControllerBase
     /// </summary>
     [HttpPost("save")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CreateProductResponse>> SaveProduct(
@@ -245,40 +312,85 @@ public sealed class ActindoProductsController : ControllerBase
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var cancellationToken = cts.Token;
 
-        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+        if (!request.Await)
+        {
+            var navError = await ValidateNavSettingsForAsync(cancellationToken);
+            if (navError != null) return navError;
+
+            var capturedRequest = request;
+            var requestPayload = DashboardPayloadSerializer.Serialize(request);
+            var sku = request.Product.sku;
+
+            _jobQueue.Enqueue(sku, "save", request.BufferId, async ct =>
+            {
+                var productLock = ProductLocks.GetOrAdd(sku, _ => new SemaphoreSlim(1, 1));
+                await productLock.WaitAsync(ct);
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<ProductSaveService>();
+
+                    var jobHandle = await _dashboardMetrics.BeginJobAsync(
+                        DashboardMetricType.Product, DashboardJobEndpoints.ProductSave, requestPayload, ct);
+                    using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+                    var sw = Stopwatch.StartNew();
+                    bool success = false; string? responsePayload = null; string? errorPayload = null;
+
+                    try
+                    {
+                        var result = await service.SaveAsync(capturedRequest, ct);
+                        success = true;
+                        responsePayload = DashboardPayloadSerializer.Serialize(result);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                    }
+                    finally
+                    {
+                        await _dashboardMetrics.CompleteJobAsync(
+                            jobHandle, success, sw.Elapsed, responsePayload, errorPayload, ct);
+                    }
+                }
+                finally
+                {
+                    productLock.Release();
+                }
+            });
+
+            return Accepted(new { message = "Sync wird ausgeführt", bufferId = request.BufferId });
+        }
+
+        var jobHandle2 = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
             DashboardJobEndpoints.ProductSave,
             DashboardPayloadSerializer.Serialize(request),
             cancellationToken);
-        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        using var jobScope2 = DashboardJobContext.Begin(jobHandle2.Id);
         var stopwatch = Stopwatch.StartNew();
-        var success = false;
-        string? responsePayload = null;
-        string? errorPayload = null;
+        var success2 = false;
+        string? responsePayload2 = null;
+        string? errorPayload2 = null;
         var saveProductLock = ProductLocks.GetOrAdd(request.Product.sku, _ => new SemaphoreSlim(1, 1));
         await saveProductLock.WaitAsync(cancellationToken);
         try
         {
             var result = await _productSaveService.SaveAsync(request, cancellationToken);
-            success = true;
-            responsePayload = DashboardPayloadSerializer.Serialize(result);
+            success2 = true;
+            responsePayload2 = DashboardPayloadSerializer.Serialize(result);
             return Ok(result);
         }
         catch (Exception ex)
         {
-            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            errorPayload2 = DashboardPayloadSerializer.SerializeError(ex);
             throw;
         }
         finally
         {
             saveProductLock.Release();
             await _dashboardMetrics.CompleteJobAsync(
-                jobHandle,
-                success,
-                stopwatch.Elapsed,
-                responsePayload,
-                errorPayload,
-                cancellationToken);
+                jobHandle2, success2, stopwatch.Elapsed, responsePayload2, errorPayload2, cancellationToken);
         }
     }
 
@@ -536,6 +648,7 @@ public sealed class ActindoProductsController : ControllerBase
     /// </summary>
     [HttpPost("full")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> FullProductSync(
         [FromBody] FullProductRequest request,
@@ -547,222 +660,281 @@ public sealed class ActindoProductsController : ControllerBase
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
         var cancellationToken = cts.Token;
 
-        var jobHandle = await _dashboardMetrics.BeginJobAsync(
+        // Capture raw text before any async returns (JsonElement might be invalid after response)
+        var rawProduct = request.Product.GetRawText();
+
+        // Quick parse to extract masterSku for lock key and job info
+        var quickNode = JsonNode.Parse(rawProduct) as JsonObject;
+        if (quickNode is null)
+            return BadRequest("Product must be a JSON object");
+        var masterSku = quickNode["sku"]?.ToString() ?? string.Empty;
+
+        if (!request.Await)
+        {
+            var navError = await ValidateNavSettingsForAsync(cancellationToken);
+            if (navError != null) return navError;
+
+            var capturedInventories = request.Inventories;
+            var capturedBufferId = request.BufferId;
+            var requestPayload = DashboardPayloadSerializer.Serialize(request);
+
+            _jobQueue.Enqueue(masterSku, "full", request.BufferId, async ct =>
+            {
+                var productLock = ProductLocks.GetOrAdd(masterSku, _ => new SemaphoreSlim(1, 1));
+                await productLock.WaitAsync(ct);
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var actindoClient = scope.ServiceProvider.GetRequiredService<ActindoClient>();
+
+                    var jobHandle = await _dashboardMetrics.BeginJobAsync(
+                        DashboardMetricType.Product, DashboardJobEndpoints.ProductFull, requestPayload, ct);
+                    using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+                    var sw = Stopwatch.StartNew();
+                    bool success = false; string? responsePayload = null; string? errorPayload = null;
+
+                    try
+                    {
+                        var results = await RunFullSyncCoreAsync(rawProduct, capturedInventories, actindoClient, ct);
+                        success = true;
+                        responsePayload = DashboardPayloadSerializer.Serialize(results);
+                        await _navCallback.SendCallbackAsync(masterSku, capturedBufferId, results, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+                    }
+                    finally
+                    {
+                        await _dashboardMetrics.CompleteJobAsync(
+                            jobHandle, success, sw.Elapsed, responsePayload, errorPayload, ct);
+                    }
+                }
+                finally
+                {
+                    productLock.Release();
+                }
+            });
+
+            return Accepted(new { message = "Sync wird ausgeführt", bufferId = request.BufferId });
+        }
+
+        // Sync path
+        var jobHandle2 = await _dashboardMetrics.BeginJobAsync(
             DashboardMetricType.Product,
             DashboardJobEndpoints.ProductFull,
             DashboardPayloadSerializer.Serialize(request),
             cancellationToken);
-
-        using var jobScope = DashboardJobContext.Begin(jobHandle.Id);
+        using var jobScope2 = DashboardJobContext.Begin(jobHandle2.Id);
         var stopwatch = Stopwatch.StartNew();
-        var success = false;
-        string? responsePayload = null;
-        string? errorPayload = null;
+        var success2 = false;
+        string? responsePayload2 = null;
+        string? errorPayload2 = null;
         SemaphoreSlim? fullSyncLock = null;
 
         try
         {
-            var endpoints = await _endpointProvider.GetAsync(cancellationToken);
-            var results = new FullProductSyncResult();
-
-            // Parse product JSON to extract variants and variant_prices
-            var productNode = JsonNode.Parse(request.Product.GetRawText());
-            if (productNode is not JsonObject productObj)
-                return BadRequest("Product must be a JSON object");
-
-            // Extract and remove middleware-only fields (variants is only for middleware)
-            var variantsNode = productObj["variants"];
-            productObj.Remove("variants");
-
-            // Determine if this is create or save based on id field
-            var hasId = productObj.ContainsKey("id") &&
-                        productObj["id"] is not null &&
-                        !string.IsNullOrWhiteSpace(productObj["id"]?.ToString());
-
-            var masterEndpoint = hasId ? endpoints.SaveProduct : endpoints.CreateProduct;
-            var masterSku = productObj["sku"]?.ToString() ?? string.Empty;
-
             fullSyncLock = ProductLocks.GetOrAdd(masterSku, _ => new SemaphoreSlim(1, 1));
             await fullSyncLock.WaitAsync(cancellationToken);
 
-            // Step 1: Create/Save master product
-            var masterPayload = new { product = productObj };
-            var masterResponse = await _actindoClient.PostAsync(masterEndpoint, masterPayload, cancellationToken);
-
-            int masterProductId;
-            if (masterResponse.TryGetProperty("product", out var productProp) &&
-                productProp.TryGetProperty("id", out var idProp))
-            {
-                if (idProp.ValueKind == JsonValueKind.Number && idProp.TryGetInt32(out var id))
-                    masterProductId = id;
-                else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out var idStr))
-                    masterProductId = idStr;
-                else
-                    throw new InvalidOperationException("Could not read master product ID from response");
-            }
-            else
-            {
-                throw new InvalidOperationException("Actindo did not return master product ID");
-            }
-
-            results.MasterProductId = masterProductId;
-            results.MasterSku = masterSku;
-            results.MasterOperation = hasId ? "saved" : "created";
-
-            // Step 2: Process variants sequentially: create/save → changeVariantMaster
-            if (variantsNode is JsonArray variantsArray && variantsArray.Count > 0)
-            {
-                foreach (var variantObj in variantsArray.OfType<JsonObject>())
-                {
-                    var variantSku = variantObj["sku"]?.ToString() ?? string.Empty;
-                    var variantHasId = variantObj.ContainsKey("id") &&
-                                       variantObj["id"] is not null &&
-                                       !string.IsNullOrWhiteSpace(variantObj["id"]?.ToString());
-
-                    var variantEndpoint = variantHasId ? endpoints.SaveProduct : endpoints.CreateProduct;
-
-                    try
-                    {
-                        var isIndi = variantObj["_pim_varcode"]?.ToString()
-                            ?.Contains("INDI", StringComparison.OrdinalIgnoreCase) == true;
-
-                        // INDI-Artikel: als master anlegen, flock-Felder leeren
-                        if (isIndi)
-                        {
-                            variantObj["variantStatus"] = JsonValue.Create("single");
-                            variantObj["_pim_flock_name"] = JsonValue.Create("");
-                            variantObj["_pim_flock_number"] = JsonValue.Create("");
-                        }
-
-                        var variantPayload = new { product = variantObj };
-                        var variantResponse = await _actindoClient.PostAsync(variantEndpoint, variantPayload, cancellationToken);
-
-                        int variantProductId;
-                        if (variantResponse.TryGetProperty("product", out var vProductProp) &&
-                            vProductProp.TryGetProperty("id", out var vIdProp))
-                        {
-                            if (vIdProp.ValueKind == JsonValueKind.Number && vIdProp.TryGetInt32(out var vId))
-                                variantProductId = vId;
-                            else if (vIdProp.ValueKind == JsonValueKind.String && int.TryParse(vIdProp.GetString(), out var vIdStr))
-                                variantProductId = vIdStr;
-                            else
-                                throw new InvalidOperationException($"Could not read variant product ID for {variantSku}");
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
-                        }
-
-                        // changeVariantMaster: immer bei Neuanlage, bei INDI auch beim Save
-                        if (!variantHasId || isIndi)
-                        {
-                            var relationPayload = new
-                            {
-                                variantProduct = new { id = variantProductId },
-                                parentProduct = new { id = masterProductId }
-                            };
-                            await _actindoClient.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
-                        }
-
-                        results.Variants.Add(new VariantSyncResultItem
-                        {
-                            Sku = variantSku,
-                            ProductId = variantProductId,
-                            Operation = variantHasId ? "saved" : "created",
-                            Success = true
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        results.Variants.Add(new VariantSyncResultItem
-                        {
-                            Sku = variantSku,
-                            Success = false,
-                            Error = ex.Message
-                        });
-                    }
-                }
-            }
-
-            // Step 3: Process inventories sequentially
-            if (request.Inventories != null && request.Inventories.Count > 0)
-            {
-                var mappings = (await _settingsStore.GetActindoSettingsAsync(cancellationToken)).WarehouseMappings;
-
-                foreach (var kvp in request.Inventories)
-                {
-                    var sku = kvp.Key;
-                    var entry = kvp.Value;
-                    if (string.IsNullOrWhiteSpace(sku) || entry?.Stocks == null || entry.Stocks.Count == 0)
-                        continue;
-
-                    foreach (var stockEntry in entry.Stocks)
-                    {
-                        if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
-                            continue;
-
-                        if (!mappings.TryGetValue(stockEntry.WarehouseId, out var warehouseId))
-                        {
-                            results.InventoryUpdates.Add(new InventoryUpdateResultItem
-                            {
-                                Sku = sku,
-                                WarehouseId = stockEntry.WarehouseId,
-                                Success = false,
-                                Error = $"Lager '{stockEntry.WarehouseId}' ist nicht gemappt. Bitte in den Einstellungen unter 'Lager-Konfiguration' eintragen."
-                            });
-                            continue;
-                        }
-
-                        var payload = new
-                        {
-                            inventory = new
-                            {
-                                sku,
-                                synchronousSync = true,
-                                compareOldValue = true,
-                                _fulfillment_inventory_amount = stockEntry.Stock,
-                                _fulfillment_inventory_warehouse = warehouseId,
-                                _fulfillment_inventory_compartment = 111,
-                                _fulfillment_inventory_postingType = new[] { new { id = 571 } },
-                                _fulfillment_inventory_postingText = "Bestandseinbuchung",
-                                _fulfillment_inventory_origin = "Middleware import"
-                            }
-                        };
-
-                        try
-                        {
-                            await _actindoClient.PostAsync(endpoints.CreateInventory, payload, cancellationToken);
-                            await _dashboardMetrics.UpdateProductStockAsync(sku, (int)(stockEntry.Stock ?? 0), warehouseId, cancellationToken);
-                            results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = true });
-                        }
-                        catch (Exception ex)
-                        {
-                            results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = false, Error = ex.Message });
-                        }
-                    }
-                }
-            }
-
-            success = true;
-            responsePayload = DashboardPayloadSerializer.Serialize(results);
+            var results = await RunFullSyncCoreAsync(rawProduct, request.Inventories, _actindoClient, cancellationToken);
+            success2 = true;
+            responsePayload2 = DashboardPayloadSerializer.Serialize(results);
             return Ok(results);
         }
         catch (Exception ex)
         {
-            errorPayload = DashboardPayloadSerializer.SerializeError(ex);
+            errorPayload2 = DashboardPayloadSerializer.SerializeError(ex);
             throw;
         }
         finally
         {
             fullSyncLock?.Release();
             await _dashboardMetrics.CompleteJobAsync(
-                jobHandle,
-                success,
-                stopwatch.Elapsed,
-                responsePayload,
-                errorPayload,
-                cancellationToken);
+                jobHandle2, success2, stopwatch.Elapsed, responsePayload2, errorPayload2, cancellationToken);
         }
+    }
+
+    private async Task<FullProductSyncResult> RunFullSyncCoreAsync(
+        string rawProduct,
+        Dictionary<string, InventoryEntry>? inventories,
+        ActindoClient actindoClient,
+        CancellationToken cancellationToken)
+    {
+        var endpoints = await _endpointProvider.GetAsync(cancellationToken);
+        var results = new FullProductSyncResult();
+
+        var productNode = JsonNode.Parse(rawProduct);
+        if (productNode is not JsonObject productObj)
+            throw new InvalidOperationException("Product must be a JSON object");
+
+        var variantsNode = productObj["variants"];
+        productObj.Remove("variants");
+
+        var hasId = productObj.ContainsKey("id") &&
+                    productObj["id"] is not null &&
+                    !string.IsNullOrWhiteSpace(productObj["id"]?.ToString());
+
+        var masterEndpoint = hasId ? endpoints.SaveProduct : endpoints.CreateProduct;
+        var masterSku = productObj["sku"]?.ToString() ?? string.Empty;
+
+        // Step 1: Create/Save master product
+        var masterPayload = new { product = productObj };
+        var masterResponse = await actindoClient.PostAsync(masterEndpoint, masterPayload, cancellationToken);
+
+        int masterProductId;
+        if (masterResponse.TryGetProperty("product", out var productProp) &&
+            productProp.TryGetProperty("id", out var idProp))
+        {
+            if (idProp.ValueKind == JsonValueKind.Number && idProp.TryGetInt32(out var id))
+                masterProductId = id;
+            else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out var idStr))
+                masterProductId = idStr;
+            else
+                throw new InvalidOperationException("Could not read master product ID from response");
+        }
+        else
+        {
+            throw new InvalidOperationException("Actindo did not return master product ID");
+        }
+
+        results.MasterProductId = masterProductId;
+        results.MasterSku = masterSku;
+        results.MasterOperation = hasId ? "saved" : "created";
+
+        // Step 2: Process variants sequentially: create/save → changeVariantMaster
+        if (variantsNode is JsonArray variantsArray && variantsArray.Count > 0)
+        {
+            foreach (var variantObj in variantsArray.OfType<JsonObject>())
+            {
+                var variantSku = variantObj["sku"]?.ToString() ?? string.Empty;
+                var variantHasId = variantObj.ContainsKey("id") &&
+                                   variantObj["id"] is not null &&
+                                   !string.IsNullOrWhiteSpace(variantObj["id"]?.ToString());
+
+                var variantEndpoint = variantHasId ? endpoints.SaveProduct : endpoints.CreateProduct;
+
+                try
+                {
+                    var isIndi = variantObj["_pim_varcode"]?.ToString()
+                        ?.Contains("INDI", StringComparison.OrdinalIgnoreCase) == true;
+
+                    if (isIndi)
+                    {
+                        variantObj["variantStatus"] = JsonValue.Create("single");
+                        variantObj["_pim_flock_name"] = JsonValue.Create("");
+                        variantObj["_pim_flock_number"] = JsonValue.Create("");
+                    }
+
+                    var variantPayload = new { product = variantObj };
+                    var variantResponse = await actindoClient.PostAsync(variantEndpoint, variantPayload, cancellationToken);
+
+                    int variantProductId;
+                    if (variantResponse.TryGetProperty("product", out var vProductProp) &&
+                        vProductProp.TryGetProperty("id", out var vIdProp))
+                    {
+                        if (vIdProp.ValueKind == JsonValueKind.Number && vIdProp.TryGetInt32(out var vId))
+                            variantProductId = vId;
+                        else if (vIdProp.ValueKind == JsonValueKind.String && int.TryParse(vIdProp.GetString(), out var vIdStr))
+                            variantProductId = vIdStr;
+                        else
+                            throw new InvalidOperationException($"Could not read variant product ID for {variantSku}");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
+                    }
+
+                    if (!variantHasId || isIndi)
+                    {
+                        var relationPayload = new
+                        {
+                            variantProduct = new { id = variantProductId },
+                            parentProduct = new { id = masterProductId }
+                        };
+                        await actindoClient.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
+                    }
+
+                    results.Variants.Add(new VariantSyncResultItem
+                    {
+                        Sku = variantSku,
+                        ProductId = variantProductId,
+                        Operation = variantHasId ? "saved" : "created",
+                        Success = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    results.Variants.Add(new VariantSyncResultItem
+                    {
+                        Sku = variantSku,
+                        Success = false,
+                        Error = ex.Message
+                    });
+                }
+            }
+        }
+
+        // Step 3: Process inventories sequentially
+        if (inventories != null && inventories.Count > 0)
+        {
+            var mappings = (await _settingsStore.GetActindoSettingsAsync(cancellationToken)).WarehouseMappings;
+
+            foreach (var kvp in inventories)
+            {
+                var sku = kvp.Key;
+                var entry = kvp.Value;
+                if (string.IsNullOrWhiteSpace(sku) || entry?.Stocks == null || entry.Stocks.Count == 0)
+                    continue;
+
+                foreach (var stockEntry in entry.Stocks)
+                {
+                    if (stockEntry?.WarehouseId is null || stockEntry.Stock is null)
+                        continue;
+
+                    if (!mappings.TryGetValue(stockEntry.WarehouseId, out var warehouseId))
+                    {
+                        results.InventoryUpdates.Add(new InventoryUpdateResultItem
+                        {
+                            Sku = sku,
+                            WarehouseId = stockEntry.WarehouseId,
+                            Success = false,
+                            Error = $"Lager '{stockEntry.WarehouseId}' ist nicht gemappt. Bitte in den Einstellungen unter 'Lager-Konfiguration' eintragen."
+                        });
+                        continue;
+                    }
+
+                    var payload = new
+                    {
+                        inventory = new
+                        {
+                            sku,
+                            synchronousSync = true,
+                            compareOldValue = true,
+                            _fulfillment_inventory_amount = stockEntry.Stock,
+                            _fulfillment_inventory_warehouse = warehouseId,
+                            _fulfillment_inventory_compartment = 111,
+                            _fulfillment_inventory_postingType = new[] { new { id = 571 } },
+                            _fulfillment_inventory_postingText = "Bestandseinbuchung",
+                            _fulfillment_inventory_origin = "Middleware import"
+                        }
+                    };
+
+                    try
+                    {
+                        await actindoClient.PostAsync(endpoints.CreateInventory, payload, cancellationToken);
+                        await _dashboardMetrics.UpdateProductStockAsync(sku, (int)(stockEntry.Stock ?? 0), warehouseId, cancellationToken);
+                        results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        results.InventoryUpdates.Add(new InventoryUpdateResultItem { Sku = sku, WarehouseId = stockEntry.WarehouseId, Success = false, Error = ex.Message });
+                    }
+                }
+            }
+        }
+
+        return results;
     }
 
 }
