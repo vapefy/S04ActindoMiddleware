@@ -50,15 +50,26 @@ public sealed class NavCallbackService
             var resultJson = JsonSerializer.SerializeToElement(result, SerializerOptions);
             var payload = BuildPayload(resultJson, sku, bufferId);
 
+            var tokenPreview = settings.NavApiToken!.Length > 8
+                ? settings.NavApiToken[..8] + "..."
+                : "(short)";
+            _logger.LogInformation(
+                "NAV callback: POST {Url} | Token starts with: {TokenPreview} | Payload keys: {Keys}",
+                settings.NavApiUrl,
+                tokenPreview,
+                string.Join(", ", ((System.Collections.Generic.Dictionary<string, object?>)payload).Keys));
+
             using var request = new HttpRequestMessage(HttpMethod.Post, settings.NavApiUrl);
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.NavApiToken);
             request.Content = JsonContent.Create(payload, options: SerializerOptions);
 
             var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
-                "NAV callback sent for SKU={Sku} BufferId={BufferId}: HTTP {Status}",
-                sku, bufferId ?? "(none)", (int)response.StatusCode);
+                "NAV callback sent for SKU={Sku} BufferId={BufferId}: HTTP {Status} | Response: {Body}",
+                sku, bufferId ?? "(none)", (int)response.StatusCode,
+                responseBody.Length > 500 ? responseBody[..500] : responseBody);
         }
         catch (Exception ex)
         {
