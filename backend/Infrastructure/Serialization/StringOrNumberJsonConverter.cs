@@ -14,7 +14,7 @@ public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
         return reader.TokenType switch
         {
             JsonTokenType.String => reader.GetString(),
-            JsonTokenType.Number => reader.GetRawText(),
+            JsonTokenType.Number => System.Text.Encoding.UTF8.GetString(reader.ValueSpan),
             JsonTokenType.Null => null,
             _ => throw new JsonException($"Cannot convert {reader.TokenType} to string")
         };
