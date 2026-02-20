@@ -623,6 +623,16 @@ public sealed class ActindoProductsController : ControllerBase
 
                     try
                     {
+                        var isIndi = variantObj["_pim_varcode"]?.ToString()
+                            ?.Contains("INDI", StringComparison.OrdinalIgnoreCase) == true;
+
+                        // INDI-Artikel: flock-Felder leeren
+                        if (isIndi)
+                        {
+                            variantObj["_pim_flock_name"] = "";
+                            variantObj["_pim_flock_number"] = "";
+                        }
+
                         var variantPayload = new { product = variantObj };
                         var variantResponse = await _actindoClient.PostAsync(variantEndpoint, variantPayload, cancellationToken);
 
@@ -642,7 +652,8 @@ public sealed class ActindoProductsController : ControllerBase
                             throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
                         }
 
-                        if (!variantHasId)
+                        // changeVariantMaster: immer bei Neuanlage, bei INDI auch beim Save
+                        if (!variantHasId || isIndi)
                         {
                             var relationPayload = new
                             {

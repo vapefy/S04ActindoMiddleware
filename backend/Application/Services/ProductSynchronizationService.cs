@@ -333,7 +333,6 @@ public abstract class ProductSynchronizationService
     {
         var endpoints = await ResolveEndpointsAsync(cancellationToken);
         var masterSku = $"{masterProduct.sku}-INDI";
-        var isNew = string.IsNullOrWhiteSpace(variant.id);
 
         var indiMasterPayload = new { product = BuildIndiMasterPayload(masterProduct, variant, masterSku) };
         LogEndpointPayload(productEndpoint, indiMasterPayload);
@@ -349,21 +348,17 @@ public abstract class ProductSynchronizationService
             masterSku,
             indiMasterId);
 
-        // Nur bei Neuanlage mit changeVariantMaster verknüpfen
-        if (isNew)
+        var relationPayload = new
         {
-            var relationPayload = new
-            {
-                variantProduct = new { id = indiMasterId },
-                parentProduct = new { id = masterProductId }
-            };
-            LogEndpointPayload(endpoints.CreateRelation, relationPayload);
-            await _client.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
-            _logger.LogInformation(
-                "INDI product {Sku} linked to master {MasterId}",
-                masterSku,
-                masterProductId);
-        }
+            variantProduct = new { id = indiMasterId },
+            parentProduct = new { id = masterProductId }
+        };
+        LogEndpointPayload(endpoints.CreateRelation, relationPayload);
+        await _client.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
+        _logger.LogInformation(
+            "INDI product {Sku} linked to master {MasterId}",
+            masterSku,
+            masterProductId);
 
         return new VariantCreationResult(masterSku, indiMasterId);
     }
