@@ -20,4 +20,16 @@ public sealed class FullProductRequest
     /// </summary>
     [JsonPropertyName("inventories")]
     public Dictionary<string, InventoryEntry>? Inventories { get; set; }
+
+    /// <summary>
+    /// Wenn false: sofort 202 antworten und Sync im Hintergrund ausführen. NAV Callback erforderlich.
+    /// </summary>
+    [JsonPropertyName("await")]
+    public bool Await { get; init; } = true;
+
+    /// <summary>
+    /// Buffer-ID aus NAV, wird im Callback zurückgesendet.
+    /// </summary>
+    [JsonPropertyName("bufferId")]
+    public string? BufferId { get; init; }
 }
