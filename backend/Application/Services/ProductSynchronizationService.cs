@@ -303,7 +303,7 @@ public abstract class ProductSynchronizationService
         {
             ["sku"] = masterSku,
             ["attributeSetId"] = variant.attributeSetId,
-            ["variantStatus"] = "master",
+            ["variantStatus"] = "single",
             ["_pim_art_name__actindo_basic__de_DE"] = name,
             ["_pim_art_name__actindo_basic__en_US"] = name,
             ["_pim_flock_name"] = "",

@@ -629,7 +629,7 @@ public sealed class ActindoProductsController : ControllerBase
                         // INDI-Artikel: als master anlegen, flock-Felder leeren
                         if (isIndi)
                         {
-                            variantObj["variantStatus"] = JsonValue.Create("master");
+                            variantObj["variantStatus"] = JsonValue.Create("single");
                             variantObj["_pim_flock_name"] = JsonValue.Create("");
                             variantObj["_pim_flock_number"] = JsonValue.Create("");
                         }
