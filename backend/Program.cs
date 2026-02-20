@@ -87,6 +87,8 @@ builder.Services.AddHttpClient<ActindoClient>(client =>
 });
 builder.Services.AddHttpClient<ActindoProductListService>();
 builder.Services.AddHttpClient<INavClient, NavClient>();
+builder.Services.AddHttpClient<ActindoMiddleware.Infrastructure.Nav.NavCallbackService>();
+builder.Services.AddSingleton<ActindoMiddleware.Application.Services.ProductJobQueue>();
 builder.Services.AddSingleton<IDashboardMetricsService, DashboardMetricsService>();
 builder.Services.AddScoped<ProductCreateService>();
 builder.Services.AddScoped<ProductSaveService>();
