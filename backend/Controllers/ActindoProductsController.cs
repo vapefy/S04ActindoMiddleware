@@ -880,15 +880,13 @@ public sealed class ActindoProductsController : ControllerBase
                         throw new InvalidOperationException($"Actindo did not return variant product ID for {variantSku}");
                     }
 
-                    if (!variantHasId || isIndi)
+                    // Always call changeVariantMaster to ensure the variant-master relationship is set correctly
+                    var relationPayload = new
                     {
-                        var relationPayload = new
-                        {
-                            variantProduct = new { id = variantProductId },
-                            parentProduct = new { id = masterProductId }
-                        };
-                        await actindoClient.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
-                    }
+                        variantProduct = new { id = variantProductId },
+                        parentProduct = new { id = masterProductId }
+                    };
+                    await actindoClient.PostAsync(endpoints.CreateRelation, relationPayload, cancellationToken);
 
                     results.Variants.Add(new VariantSyncResultItem
                     {
