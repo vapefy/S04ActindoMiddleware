@@ -146,7 +146,7 @@ public sealed class ActindoProductsController : ControllerBase
 
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(result);
-                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, created: true, ct);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, ToNavCallbackPayload(sku, result, created: true), created: true, ct);
                     }
                     catch (Exception ex)
                     {
@@ -357,7 +357,7 @@ public sealed class ActindoProductsController : ControllerBase
                         var result = await service.SaveAsync(capturedRequest, ct);
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(result);
-                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, result, created: false, ct);
+                        await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, ToNavCallbackPayload(sku, result, created: false), created: false, ct);
                     }
                     catch (Exception ex)
                     {
@@ -969,6 +969,25 @@ public sealed class ActindoProductsController : ControllerBase
 
         return results;
     }
+
+    /// <summary>
+    /// Wandelt eine CreateProductResponse in das einheitliche NAV-Callback-Format um (wie FullProductSyncResult).
+    /// </summary>
+    private static object ToNavCallbackPayload(string masterSku, CreateProductResponse result, bool created) => new
+    {
+        masterProductId = result.ProductId,
+        masterSku,
+        masterOperation = created ? "created" : "saved",
+        variants = result.Variants?.Select(v => new
+        {
+            sku = v.Sku,
+            productId = v.Id,
+            operation = created ? "created" : "saved",
+            success = true
+        }).ToList() ?? new List<object>(),
+        variantErrors = result.VariantErrors,
+        success = result.Success
+    };
 
 }
 
