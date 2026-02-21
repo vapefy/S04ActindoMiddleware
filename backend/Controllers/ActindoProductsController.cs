@@ -978,13 +978,13 @@ public sealed class ActindoProductsController : ControllerBase
         masterProductId = result.ProductId,
         masterSku,
         masterOperation = created ? "created" : "saved",
-        variants = result.Variants?.Select(v => new
+        variants = (result.Variants ?? []).Select(v => new
         {
             sku = v.Sku,
             productId = v.Id,
             operation = created ? "created" : "saved",
             success = true
-        }).ToList() ?? new List<object>(),
+        }).ToList(),
         variantErrors = result.VariantErrors,
         success = result.Success
     };
