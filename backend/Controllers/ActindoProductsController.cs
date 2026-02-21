@@ -58,6 +58,16 @@ public sealed class ActindoProductsController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("active-jobs/{jobId:guid}/logs")]
+    [Authorize(Policy = AuthPolicies.Read)]
+    public IActionResult GetJobLogs(Guid jobId)
+    {
+        var logs = _jobQueue.GetLogs(jobId);
+        if (logs is null)
+            return NotFound();
+        return Ok(logs);
+    }
+
     [HttpGet("active-jobs")]
     [Authorize(Policy = AuthPolicies.Read)]
     public IActionResult GetActiveJobs() => Ok(_jobQueue.GetAll());

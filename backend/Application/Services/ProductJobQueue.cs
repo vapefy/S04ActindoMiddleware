@@ -16,6 +16,14 @@ public enum ProductSyncJobStatus
     Failed
 }
 
+public sealed class ProductJobLogEntry
+{
+    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public string Endpoint { get; init; } = string.Empty;
+    public bool Success { get; init; }
+    public string? Error { get; init; }
+}
+
 public sealed class ProductJobInfo
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -27,10 +35,28 @@ public sealed class ProductJobInfo
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? Error { get; set; }
+
+    private readonly List<ProductJobLogEntry> _logs = new();
+    private readonly object _logsLock = new();
+
+    public IReadOnlyList<ProductJobLogEntry> GetLogs()
+    {
+        lock (_logsLock) { return _logs.ToList(); }
+    }
+
+    internal void AddLogEntry(ProductJobLogEntry entry)
+    {
+        lock (_logsLock) { _logs.Add(entry); }
+    }
 }
 
 public sealed class ProductJobQueue
 {
+    private static readonly AsyncLocal<Guid?> _currentJobId = new();
+
+    /// <summary>Gibt die Job-ID des aktuell laufenden Jobs im aktuellen async-Kontext zurück.</summary>
+    public static Guid? CurrentJobId => _currentJobId.Value;
+
     private readonly SemaphoreSlim _semaphore = new(5, 5);
     private readonly ConcurrentDictionary<Guid, ProductJobInfo> _jobs = new();
     private readonly ILogger<ProductJobQueue> _logger;
@@ -39,6 +65,17 @@ public sealed class ProductJobQueue
     {
         _logger = logger;
     }
+
+    /// <summary>Hängt einen API-Log-Eintrag an den Job mit der gegebenen ID.</summary>
+    public void AddLog(Guid jobId, string endpoint, bool success, string? error = null)
+    {
+        if (_jobs.TryGetValue(jobId, out var job))
+            job.AddLogEntry(new ProductJobLogEntry { Endpoint = endpoint, Success = success, Error = error });
+    }
+
+    /// <summary>Gibt die Log-Einträge eines Jobs zurück, oder null wenn der Job nicht existiert.</summary>
+    public IReadOnlyList<ProductJobLogEntry>? GetLogs(Guid jobId) =>
+        _jobs.TryGetValue(jobId, out var job) ? job.GetLogs() : null;
 
     public Guid Enqueue(string sku, string operation, string? bufferId, Func<CancellationToken, Task> work)
     {
@@ -66,6 +103,7 @@ public sealed class ProductJobQueue
 
         info.Status = ProductSyncJobStatus.Running;
         info.StartedAt = DateTimeOffset.UtcNow;
+        _currentJobId.Value = info.Id;
 
         _logger.LogInformation(
             "Product sync job started: {JobId} SKU={Sku} Operation={Operation}",
@@ -92,6 +130,7 @@ public sealed class ProductJobQueue
         }
         finally
         {
+            _currentJobId.Value = null;
             _semaphore.Release();
             info.CompletedAt = DateTimeOffset.UtcNow;
 

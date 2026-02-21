@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		Loader2,
 		Clock,
@@ -7,9 +7,14 @@
 		XCircle,
 		Zap,
 		RefreshCw,
-		PackageSearch
+		PackageSearch,
+		ChevronDown,
+		ChevronRight,
+		Terminal,
+		CircleCheck,
+		CircleX
 	} from 'lucide-svelte';
-	import type { ProductJobInfo } from '$api/types';
+	import type { ProductJobInfo, ProductJobLogEntry } from '$api/types';
 	import { products as productsApi } from '$api/client';
 	import PageHeader from '$components/layout/PageHeader.svelte';
 	import Card from '$components/ui/Card.svelte';
@@ -19,6 +24,12 @@
 	let loading = $state(true);
 	let now = $state(Date.now());
 
+	// Log console state
+	let expandedJobId = $state<string | null>(null);
+	let jobLogs = $state<ProductJobLogEntry[]>([]);
+	let logsLoading = $state(false);
+	let logPollInterval: ReturnType<typeof setInterval> | null = null;
+
 	let runningCount = $derived(activeJobs.filter((j) => j.status === 'running').length);
 	let queuedCount = $derived(activeJobs.filter((j) => j.status === 'queued').length);
 	let completedCount = $derived(activeJobs.filter((j) => j.status === 'completed').length);
@@ -27,11 +38,64 @@
 	async function load() {
 		try {
 			activeJobs = await productsApi.activeJobs();
+			// If expanded job is gone, close it
+			if (expandedJobId && !activeJobs.find((j) => j.id === expandedJobId)) {
+				closeLogConsole();
+			}
 		} catch {
 			// ignore
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function loadLogs(jobId: string) {
+		try {
+			jobLogs = await productsApi.jobLogs(jobId);
+		} catch {
+			// ignore
+		}
+	}
+
+	function startLogPolling(jobId: string) {
+		stopLogPolling();
+		loadLogs(jobId);
+		logPollInterval = setInterval(() => {
+			const job = activeJobs.find((j) => j.id === jobId);
+			if (job && (job.status === 'running' || job.status === 'queued')) {
+				loadLogs(jobId);
+			} else {
+				// Job done - load once more then stop
+				loadLogs(jobId);
+				stopLogPolling();
+			}
+		}, 1500);
+	}
+
+	function stopLogPolling() {
+		if (logPollInterval !== null) {
+			clearInterval(logPollInterval);
+			logPollInterval = null;
+		}
+	}
+
+	async function toggleJob(job: ProductJobInfo) {
+		if (expandedJobId === job.id) {
+			closeLogConsole();
+			return;
+		}
+		expandedJobId = job.id;
+		jobLogs = [];
+		logsLoading = true;
+		await tick();
+		logsLoading = false;
+		startLogPolling(job.id);
+	}
+
+	function closeLogConsole() {
+		expandedJobId = null;
+		jobLogs = [];
+		stopLogPolling();
 	}
 
 	function elapsedSeconds(from: string | null, to: string | null): string {
@@ -52,6 +116,26 @@
 		return op;
 	}
 
+	function formatTime(ts: string): string {
+		return new Date(ts).toLocaleTimeString('de-DE', {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		});
+	}
+
+	function shortEndpoint(endpoint: string): string {
+		// Extract last path segment or method name from URL
+		try {
+			const url = new URL(endpoint);
+			const parts = url.pathname.split('/').filter(Boolean);
+			return parts[parts.length - 1] ?? endpoint;
+		} catch {
+			// not a URL, maybe just a method name
+			return endpoint.split('.').pop() ?? endpoint;
+		}
+	}
+
 	onMount(() => {
 		load();
 		const pollInterval = setInterval(() => load(), 3000);
@@ -59,6 +143,7 @@
 		return () => {
 			clearInterval(pollInterval);
 			clearInterval(clockInterval);
+			stopLogPolling();
 		};
 	});
 </script>
@@ -133,6 +218,7 @@
 			<table class="w-full text-sm">
 				<thead>
 					<tr class="border-b border-white/10 text-left">
+						<th class="pb-3 pr-2 w-6"></th>
 						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Status</th>
 						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">SKU</th>
 						<th class="pb-3 pr-4 font-medium text-gray-400 whitespace-nowrap">Operation</th>
@@ -144,14 +230,27 @@
 				</thead>
 				<tbody class="divide-y divide-white/5">
 					{#each activeJobs as job (job.id)}
+						<!-- Job row -->
 						<tr
-							class="transition-colors
+							class="cursor-pointer transition-colors hover:bg-white/5
 								{job.status === 'running'
 								? 'bg-royal-600/5'
 								: job.status === 'failed'
 									? 'bg-red-900/5'
-									: ''}"
+									: ''}
+								{expandedJobId === job.id ? 'bg-white/5' : ''}"
+							onclick={() => toggleJob(job)}
+							title="Klicken für API-Log"
 						>
+							<!-- Expand indicator -->
+							<td class="py-3 pr-2 text-gray-500">
+								{#if expandedJobId === job.id}
+									<ChevronDown size={14} />
+								{:else}
+									<ChevronRight size={14} />
+								{/if}
+							</td>
+
 							<!-- Status -->
 							<td class="py-3 pr-4">
 								<div class="flex items-center gap-2 whitespace-nowrap">
@@ -234,12 +333,90 @@
 								{/if}
 							</td>
 						</tr>
+
+						<!-- Log console row -->
+						{#if expandedJobId === job.id}
+							<tr>
+								<td colspan="8" class="pb-3 pt-0">
+									<div class="mx-1 rounded-lg border border-white/10 bg-gray-950/80 overflow-hidden">
+										<!-- Console header -->
+										<div class="flex items-center gap-2 px-3 py-2 border-b border-white/10 bg-black/30">
+											<Terminal size={13} class="text-royal-400" />
+											<span class="text-xs font-mono font-medium text-royal-300">
+												Actindo API Log — {job.sku}
+											</span>
+											{#if job.status === 'running'}
+												<div class="flex items-center gap-1.5 ml-auto">
+													<span class="inline-block w-1.5 h-1.5 rounded-full bg-royal-400 animate-pulse"></span>
+													<span class="text-xs text-royal-400 font-mono">live</span>
+												</div>
+											{:else}
+												<span class="text-xs text-gray-500 font-mono ml-auto">
+													{jobLogs.length} {jobLogs.length === 1 ? 'Eintrag' : 'Einträge'}
+												</span>
+											{/if}
+										</div>
+
+										<!-- Console body -->
+										<div class="font-mono text-xs p-3 space-y-1.5 max-h-64 overflow-y-auto">
+											{#if jobLogs.length === 0}
+												{#if job.status === 'queued'}
+													<p class="text-gray-500 italic">Wartet auf freien Slot...</p>
+												{:else if job.status === 'running'}
+													<div class="flex items-center gap-2 text-gray-500">
+														<Loader2 size={12} class="animate-spin text-royal-500" />
+														<span class="italic">Warte auf ersten API-Call...</span>
+													</div>
+												{:else}
+													<p class="text-gray-500 italic">Keine API-Calls aufgezeichnet.</p>
+												{/if}
+											{:else}
+												{#each jobLogs as entry}
+													<div class="flex items-start gap-2 group">
+														<!-- Status icon -->
+														<div class="mt-0.5 shrink-0">
+															{#if entry.success}
+																<CircleCheck size={12} class="text-green-400" />
+															{:else}
+																<CircleX size={12} class="text-red-400" />
+															{/if}
+														</div>
+
+														<!-- Timestamp -->
+														<span class="text-gray-600 shrink-0 tabular-nums">
+															{formatTime(entry.timestamp)}
+														</span>
+
+														<!-- Endpoint + error -->
+														<div class="min-w-0 flex-1">
+															<span class="{entry.success ? 'text-green-300' : 'text-red-300'} break-all">
+																{shortEndpoint(entry.endpoint)}
+															</span>
+															{#if entry.error}
+																<span class="text-red-400/80 ml-2 break-all">→ {entry.error}</span>
+															{/if}
+														</div>
+													</div>
+												{/each}
+
+												{#if job.status === 'running'}
+													<div class="flex items-center gap-2 text-gray-500 pt-0.5">
+														<Loader2 size={11} class="animate-spin text-royal-500 shrink-0" />
+														<span class="italic">Läuft...</span>
+													</div>
+												{/if}
+											{/if}
+										</div>
+									</div>
+								</td>
+							</tr>
+						{/if}
 					{/each}
 				</tbody>
 			</table>
 		</div>
 		<p class="text-xs text-gray-600 mt-4">
-			Abgeschlossene Jobs werden nach 5 Minuten automatisch entfernt.
+			Abgeschlossene Jobs werden nach 5 Minuten automatisch entfernt. Klick auf eine Zeile für den API-Log.
 		</p>
 	{/if}
 </Card>

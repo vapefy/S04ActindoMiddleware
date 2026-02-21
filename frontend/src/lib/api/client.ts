@@ -9,6 +9,7 @@ import type {
 	ProductListItem,
 	ProductStockItem,
 	ProductJobInfo,
+	ProductJobLogEntry,
 	CustomerListItem,
 	UserDto,
 	CreateUserRequest,
@@ -173,7 +174,10 @@ export const products = {
 			body: JSON.stringify(data)
 		}),
 
-	activeJobs: () => request<ProductJobInfo[]>('/api/actindo/products/active-jobs')
+	activeJobs: () => request<ProductJobInfo[]>('/api/actindo/products/active-jobs'),
+
+	jobLogs: (jobId: string) =>
+		request<ProductJobLogEntry[]>(`/api/actindo/products/active-jobs/${jobId}/logs`)
 };
 
 // Customers API

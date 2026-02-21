@@ -1,6 +1,13 @@
 // Active Product Sync Jobs
 export type ProductSyncJobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
+export interface ProductJobLogEntry {
+	timestamp: string;
+	endpoint: string;
+	success: boolean;
+	error: string | null;
+}
+
 export interface ProductJobInfo {
 	id: string;
 	sku: string;

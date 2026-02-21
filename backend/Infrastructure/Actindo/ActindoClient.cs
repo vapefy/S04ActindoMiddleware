@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ActindoMiddleware.Application.Monitoring;
+using ActindoMiddleware.Application.Services;
 using ActindoMiddleware.Infrastructure.Actindo.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -13,6 +14,7 @@ public sealed class ActindoClient
     private readonly IAuthenticationService _authenticationService;
     private readonly IDashboardMetricsService _dashboardMetrics;
     private readonly IActindoAvailabilityTracker _availabilityTracker;
+    private readonly ProductJobQueue _productJobQueue;
     private readonly ILogger<ActindoClient> _logger;
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -21,12 +23,14 @@ public sealed class ActindoClient
         IAuthenticationService authenticationService,
         IDashboardMetricsService dashboardMetrics,
         IActindoAvailabilityTracker availabilityTracker,
+        ProductJobQueue productJobQueue,
         ILogger<ActindoClient> logger)
     {
         _httpClient = httpClient;
         _authenticationService = authenticationService;
         _dashboardMetrics = dashboardMetrics;
         _availabilityTracker = availabilityTracker;
+        _productJobQueue = productJobQueue;
         _logger = logger;
     }
 
@@ -64,11 +68,13 @@ public sealed class ActindoClient
 
                 _logger.LogError("Actindo request to {Endpoint} failed with {StatusCode}: {Response}", endpoint, (int)response.StatusCode, responseContent);
                 _availabilityTracker.ReportFailure(ex);
+                AppendJobLog(endpoint, false, $"HTTP {(int)response.StatusCode}: {actindoError}");
                 await AppendActindoLogAsync(endpoint, serializedPayload, responseContent, false, cancellationToken);
                 throw ex;
             }
 
             _availabilityTracker.ReportSuccess();
+            AppendJobLog(endpoint, true);
             await AppendActindoLogAsync(endpoint, serializedPayload, responseContent, true, cancellationToken);
 
             using var document = JsonDocument.Parse(responseContent);
@@ -82,6 +88,7 @@ public sealed class ActindoClient
         {
             _availabilityTracker.ReportFailure(ex);
             _logger.LogError(ex, "Actindo request to {Endpoint} failed.", endpoint);
+            AppendJobLog(endpoint, false, ex.Message);
             await AppendActindoLogAsync(
                 endpoint,
                 serializedPayload,
@@ -90,6 +97,13 @@ public sealed class ActindoClient
                 cancellationToken);
             throw;
         }
+    }
+
+    private void AppendJobLog(string endpoint, bool success, string? error = null)
+    {
+        var jobId = ProductJobQueue.CurrentJobId;
+        if (jobId.HasValue)
+            _productJobQueue.AddLog(jobId.Value, endpoint, success, error);
     }
 
     private static string? TryExtractActindoErrorMessage(string responseContent)
