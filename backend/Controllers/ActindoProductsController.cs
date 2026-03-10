@@ -355,6 +355,25 @@ public sealed class ActindoProductsController : ControllerBase
                     try
                     {
                         var result = await service.SaveAsync(capturedRequest, ct);
+                        var product = capturedRequest.Product;
+                        var hasVariants = product.Variants?.Count > 0;
+
+                        await _dashboardMetrics.SaveProductAsync(
+                            jobHandle.Id, product.sku, GetProductName(product),
+                            result.ProductId, hasVariants ? "master" : "single", null, null, ct);
+
+                        if (result.Variants != null)
+                        {
+                            foreach (var variantResult in result.Variants)
+                            {
+                                var variantDto = product.Variants?.FirstOrDefault(v => v.sku == variantResult.Sku);
+                                await _dashboardMetrics.SaveProductAsync(
+                                    jobHandle.Id, variantResult.Sku,
+                                    variantDto != null ? GetProductName(variantDto) : string.Empty,
+                                    variantResult.Id, "child", product.sku, variantDto?._pim_varcode, ct);
+                            }
+                        }
+
                         success = true;
                         responsePayload = DashboardPayloadSerializer.Serialize(result);
                         await _navCallback.SendCallbackAsync(sku, capturedRequest.BufferId, ToNavCallbackPayload(sku, result, created: false), created: false, ct);
@@ -398,6 +417,25 @@ public sealed class ActindoProductsController : ControllerBase
             var result = await _productSaveService.SaveAsync(request, cancellationToken);
             success2 = true;
             responsePayload2 = DashboardPayloadSerializer.Serialize(result);
+
+            var product2 = request.Product;
+            var hasVariants2 = product2.Variants?.Count > 0;
+            await _dashboardMetrics.SaveProductAsync(
+                jobHandle2.Id, product2.sku, GetProductName(product2),
+                result.ProductId, hasVariants2 ? "master" : "single", null, null, cancellationToken);
+
+            if (result.Variants != null)
+            {
+                foreach (var variantResult in result.Variants)
+                {
+                    var variantDto = product2.Variants?.FirstOrDefault(v => v.sku == variantResult.Sku);
+                    await _dashboardMetrics.SaveProductAsync(
+                        jobHandle2.Id, variantResult.Sku,
+                        variantDto != null ? GetProductName(variantDto) : string.Empty,
+                        variantResult.Id, "child", product2.sku, variantDto?._pim_varcode, cancellationToken);
+                }
+            }
+
             return Ok(result);
         }
         catch (Exception ex)

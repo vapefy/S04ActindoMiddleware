@@ -598,24 +598,49 @@ public sealed class DashboardMetricsService : IDashboardMetricsService
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText =
+        // Try to update existing row first
+        await using var updateCommand = connection.CreateCommand();
+        updateCommand.CommandText =
+            """
+            UPDATE Products
+            SET JobId = @jobId,
+                ActindoProductId = COALESCE(@actindoProductId, ActindoProductId),
+                Name = @name,
+                VariantStatus = @variantStatus,
+                ParentSku = @parentSku,
+                VariantCode = @variantCode
+            WHERE Sku = @sku;
+            """;
+        updateCommand.Parameters.AddWithValue("@jobId", jobId.ToString());
+        updateCommand.Parameters.AddWithValue("@actindoProductId", actindoProductId.HasValue ? actindoProductId.Value : DBNull.Value);
+        updateCommand.Parameters.AddWithValue("@sku", sku);
+        updateCommand.Parameters.AddWithValue("@name", name ?? string.Empty);
+        updateCommand.Parameters.AddWithValue("@variantStatus", variantStatus);
+        updateCommand.Parameters.AddWithValue("@parentSku", (object?)parentSku ?? DBNull.Value);
+        updateCommand.Parameters.AddWithValue("@variantCode", (object?)variantCode ?? DBNull.Value);
+
+        var rowsUpdated = await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+        if (rowsUpdated > 0)
+            return;
+
+        // Row doesn't exist yet — insert
+        await using var insertCommand = connection.CreateCommand();
+        insertCommand.CommandText =
             """
             INSERT INTO Products (Id, JobId, ActindoProductId, Sku, Name, VariantStatus, ParentSku, VariantCode, CreatedAt)
             VALUES (@id, @jobId, @actindoProductId, @sku, @name, @variantStatus, @parentSku, @variantCode, @createdAt);
             """;
+        insertCommand.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
+        insertCommand.Parameters.AddWithValue("@jobId", jobId.ToString());
+        insertCommand.Parameters.AddWithValue("@actindoProductId", actindoProductId.HasValue ? actindoProductId.Value : DBNull.Value);
+        insertCommand.Parameters.AddWithValue("@sku", sku);
+        insertCommand.Parameters.AddWithValue("@name", name ?? string.Empty);
+        insertCommand.Parameters.AddWithValue("@variantStatus", variantStatus);
+        insertCommand.Parameters.AddWithValue("@parentSku", (object?)parentSku ?? DBNull.Value);
+        insertCommand.Parameters.AddWithValue("@variantCode", (object?)variantCode ?? DBNull.Value);
+        insertCommand.Parameters.AddWithValue("@createdAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
-        command.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
-        command.Parameters.AddWithValue("@jobId", jobId.ToString());
-        command.Parameters.AddWithValue("@actindoProductId", actindoProductId.HasValue ? actindoProductId.Value : DBNull.Value);
-        command.Parameters.AddWithValue("@sku", sku);
-        command.Parameters.AddWithValue("@name", name ?? string.Empty);
-        command.Parameters.AddWithValue("@variantStatus", variantStatus);
-        command.Parameters.AddWithValue("@parentSku", (object?)parentSku ?? DBNull.Value);
-        command.Parameters.AddWithValue("@variantCode", (object?)variantCode ?? DBNull.Value);
-        command.Parameters.AddWithValue("@createdAt", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture));
-
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await insertCommand.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdateProductPriceAsync(
