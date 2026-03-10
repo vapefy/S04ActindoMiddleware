@@ -444,7 +444,7 @@
 			</table>
 		</div>
 		<p class="text-xs text-gray-600 mt-4">
-			Erfolgreiche Jobs werden nach 5 Tagen automatisch entfernt. Fehlgeschlagene nach 5 Minuten. Klick auf eine Zeile für den API-Log.
+			Erfolgreiche Jobs werden nach 5 Tagen automatisch entfernt. Fehlgeschlagene Jobs bleiben dauerhaft. Klick auf eine Zeile für den API-Log.
 		</p>
 	{/if}
 </Card>
@@ -454,7 +454,7 @@
 	<Modal
 		bind:open={payloadModalOpen}
 		title={shortEndpoint(selectedLogEntry.endpoint)}
-		class="max-w-4xl"
+		class="max-w-7xl"
 		onclose={() => (selectedLogEntry = null)}
 	>
 		<div class="space-y-4">
@@ -467,7 +467,7 @@
 					<div class="flex items-center gap-2 mb-2">
 						<span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Request</span>
 					</div>
-					<pre class="text-xs font-mono bg-black/40 border border-white/10 rounded-lg p-3 overflow-auto max-h-96 text-gray-300 whitespace-pre-wrap break-all">{formatJson(selectedLogEntry.requestPayload)}</pre>
+					<pre class="text-xs font-mono bg-black/40 border border-white/10 rounded-lg p-3 overflow-x-auto max-h-96 text-gray-300 whitespace-pre">{formatJson(selectedLogEntry.requestPayload)}</pre>
 				</div>
 
 				<!-- Response -->
@@ -478,7 +478,7 @@
 							<span class="text-xs px-1.5 py-0.5 rounded bg-red-900/40 text-red-400">Fehler</span>
 						{/if}
 					</div>
-					<pre class="text-xs font-mono bg-black/40 border border-white/10 rounded-lg p-3 overflow-auto max-h-96 {selectedLogEntry.success ? 'text-gray-300' : 'text-red-300'} whitespace-pre-wrap break-all">{formatJson(selectedLogEntry.responsePayload)}</pre>
+					<pre class="text-xs font-mono bg-black/40 border border-white/10 rounded-lg p-3 overflow-x-auto max-h-96 {selectedLogEntry.success ? 'text-gray-300' : 'text-red-300'} whitespace-pre">{formatJson(selectedLogEntry.responsePayload)}</pre>
 				</div>
 			</div>
 		</div>

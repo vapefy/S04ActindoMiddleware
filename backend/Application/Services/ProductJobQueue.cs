@@ -143,12 +143,10 @@ public sealed class ProductJobQueue
             _semaphore.Release();
             info.CompletedAt = DateTimeOffset.UtcNow;
 
-            // Successful jobs: keep 5 days; failed jobs: remove after 5 minutes
-            var removeDelay = info.Status == ProductSyncJobStatus.Completed
-                ? TimeSpan.FromDays(5)
-                : TimeSpan.FromMinutes(5);
-            _ = Task.Delay(removeDelay)
-                    .ContinueWith(t => _jobs.TryRemove(info.Id, out _));
+            // Successful jobs: keep 5 days; failed jobs: keep indefinitely
+            if (info.Status == ProductSyncJobStatus.Completed)
+                _ = Task.Delay(TimeSpan.FromDays(5))
+                        .ContinueWith(t => _jobs.TryRemove(info.Id, out _));
         }
     }
 
